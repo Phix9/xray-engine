@@ -1,0 +1,89 @@
+# ==============================================================================
+# XrayEngine
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# CMake / build output
+# ------------------------------------------------------------------------------
+# The top-level CMakeLists.txt rejects in-source builds, so all build output
+# (including the generated XrayEngine.sln / *.vcxproj files) lives in build/.
+build/
+build-*/
+out/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+CPackConfig.cmake
+CPackSourceConfig.cmake
+install_manifest.txt
+compile_commands.json
+
+# ------------------------------------------------------------------------------
+# Generated shader artifacts
+# ------------------------------------------------------------------------------
+# shader/ShaderCompile.cmake runs glslangValidator to emit SPIR-V into
+# generated/spv/ and then bakes it into C++ headers in generated/cpp/.
+# Both are recreated on every configure/build and must not be committed.
+shader/generated/
+
+# ------------------------------------------------------------------------------
+# Visual Studio / MSVC
+# ------------------------------------------------------------------------------
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.VC.db
+*.VC.VC.opendb
+*.ipch
+*.obj
+*.o
+*.lo
+*.sbr
+*.idb
+*.ilk
+*.pdb
+*.exp
+*.exe
+*.dll
+*.lib
+*.tlog
+*.log
+*.lastbuildstate
+*.buildid
+*.res
+Debug/
+Release/
+RelWithDebInfo/
+MinSizeRel/
+# NOTE: if third-party binaries (GLFW, Assimp, ...) are ever vendored into this
+# repository, drop the *.dll / *.lib / *.exe patterns above.
+
+# ------------------------------------------------------------------------------
+# Editors / IDEs
+# ------------------------------------------------------------------------------
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# ------------------------------------------------------------------------------
+# OS
+# ------------------------------------------------------------------------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
