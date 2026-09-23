@@ -6,10 +6,16 @@
 
 namespace XrayEngine
 {
-    const std::array<MeshVertex, 3> meshData{
-        glm::vec2{-0.5, 0.5},
-        glm::vec2{0.5, 0.5},
-        glm::vec2{0.0, -0.5},
+    const std::vector<MeshVertex> meshData{
+        {glm::vec2{-0.5, 0.5}, glm::vec2{0.0, 1.0}},
+        {glm::vec2{0.5, 0.5}, glm::vec2{1.0, 1.0}},
+        {glm::vec2{0.5, -0.5}, glm::vec2{1.0, 0.0}},
+        {glm::vec2{-0.5, -0.5}, glm::vec2{0.0, 0.0}},
+    };
+
+    const std::vector<uint16_t> indices{
+        0, 1, 3,
+        1, 2, 3,
     };
 
     glm::vec3 color{0.0, 1.0, 0.0};
@@ -25,71 +31,50 @@ namespace XrayEngine
         vulkanRHI = std::make_shared<VulkanRHI>();
         vulkanRHI->Initialize(vulkanRHIInitInfo);
 
+        RenderResourceInitInfo renderResourceInitInfo;
+        renderResourceInitInfo.vulkanRHI = vulkanRHI;
+        renderResource = std::make_shared<RenderResource>();
+        renderResource->Initialize(renderResourceInitInfo);
+        TextureData textureData = renderResource->LoadTexture("asset/texture.png");
+        renderResource->CreateMeshes(meshData);
+        renderResource->CreateTextures(textureData);
+
         MainCameraPassInitInfo mainCameraPassInitInfo;
         mainCameraPassInitInfo.vulkanRHI = vulkanRHI;
+        mainCameraPassInitInfo.renderResource = renderResource;
         mainCameraPass = std::make_shared<MainCameraPass>();
         mainCameraPass->Initialize(&mainCameraPassInitInfo);
 
-        // initialize vertex buffer
-        {
-            vk::BufferCreateInfo createInfo;
-            createInfo.setSize(sizeof(meshData))
-                .setUsage(vk::BufferUsageFlagBits::eTransferSrc)
-                .setSharingMode(vk::SharingMode::eExclusive);
-            hostVertexBuffer = vulkanRHI->CreateBuffer(createInfo, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, hostVertexBufferMemory);
+        renderResource->CreateIndices(indices);
 
-            createInfo.setSize(sizeof(meshData))
-                .setUsage(vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer)
-                .setSharingMode(vk::SharingMode::eExclusive);
-            deviceVertexBuffer = vulkanRHI->CreateBuffer(createInfo, vk::MemoryPropertyFlagBits::eDeviceLocal, deviceVertexBufferMemory);
-
-            void *ptr = vulkanRHI->MapMemory(hostVertexBufferMemory, 0, sizeof(meshData));
-            memcpy(ptr, meshData.data(), sizeof(meshData));
-            vulkanRHI->UnmapMemory(hostVertexBufferMemory);
-            
-            vk::CommandBuffer commandBuffer = vulkanRHI->BeginOneTimeCommandBuffer();
-            
-            vk::BufferCopy region;
-            region.setSrcOffset(0)
-            .setDstOffset(0)
-            .setSize(sizeof(meshData));
-            
-            vulkanRHI->CommandCopyBuffer(commandBuffer, hostVertexBuffer, deviceVertexBuffer, region);
-            
-            vulkanRHI->EndOneTimeCommandBuffer(commandBuffer);
-            
-            vulkanRHI->DestroyBuffer(hostVertexBuffer);
-            vulkanRHI->FreeMemory(hostVertexBufferMemory);
-        }
-        
         // initialize uniform buffer
         {
+            const vk::DeviceSize uniformBufferSize = sizeof(glm::vec4);
+
             vk::BufferCreateInfo createInfo;
-            createInfo.setSize(sizeof(glm::vec4))
-            .setUsage(vk::BufferUsageFlagBits::eUniformBuffer)
-            .setSharingMode(vk::SharingMode::eExclusive);
+            createInfo.setSize(uniformBufferSize)
+                .setUsage(vk::BufferUsageFlagBits::eUniformBuffer)
+                .setSharingMode(vk::SharingMode::eExclusive);
             uniformBuffer = vulkanRHI->CreateBuffer(createInfo, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, uniformBufferMemory);
 
-            mappedUniformBuffer = vulkanRHI->MapMemory(uniformBufferMemory, 0, sizeof(glm::vec4));
+            mappedUniformBuffer = vulkanRHI->MapMemory(uniformBufferMemory, 0, uniformBufferSize);
 
             const glm::vec4 uniformData{color, 0.0f};
             memcpy(mappedUniformBuffer, &uniformData, sizeof(uniformData));
         }
 
-        mainCameraPass->PreparePassData(deviceVertexBuffer, uniformBuffer);
+        mainCameraPass->PreparePassData(uniformBuffer);
     }
     
     void RenderSystem::Quit()
     {
         vulkanRHI->WaitIdle();
 
-        vulkanRHI->DestroyBuffer(deviceVertexBuffer);
-        vulkanRHI->FreeMemory(deviceVertexBufferMemory);
-
         vulkanRHI->UnmapMemory(uniformBufferMemory);
         vulkanRHI->DestroyBuffer(uniformBuffer);
         vulkanRHI->FreeMemory(uniformBufferMemory);
 
+        renderResource->Quit();
         mainCameraPass->Quit();
         vulkanRHI->Quit();
     }

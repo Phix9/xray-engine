@@ -1,7 +1,7 @@
 #pragma once
 
-#include "render/mesh.hpp"
 #include "render/renderPass.hpp"
+#include "render/renderMesh.hpp"
 
 namespace XrayEngine
 {
@@ -37,14 +37,16 @@ namespace XrayEngine
         void Initialize(const RenderPassInitInfo *initInfo) override final;
         void Quit();
 
-        void PreparePassData(const vk::Buffer &vertexBuffer, const vk::Buffer &uniformBuffer);
+        void PreparePassData(const vk::Buffer &uniformBuffer);
         void Draw();
 
     private:
         vk::Buffer vertexBuffer;
+        vk::Buffer indexBuffer;
         vk::Buffer uniformBuffer;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorSet descriptorSet;
+        vk::Sampler sampler;
 
         void SetupRenderPass();
         void SetupPipelines();

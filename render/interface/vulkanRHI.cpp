@@ -234,12 +234,16 @@ namespace XrayEngine
 
     void VulkanRHI::CreateDescriptorPool()
     {
-        vk::DescriptorPoolSize poolSize;
-        poolSize.setType(vk::DescriptorType::eUniformBuffer)
+        std::vector<vk::DescriptorPoolSize> poolSizes;
+        poolSizes.resize(2);
+
+        poolSizes[0].setType(vk::DescriptorType::eUniformBuffer)
+            .setDescriptorCount(1);
+        poolSizes[1].setType(vk::DescriptorType::eCombinedImageSampler)
             .setDescriptorCount(1);
 
         vk::DescriptorPoolCreateInfo createInfo;
-        createInfo.setPoolSizes(poolSize)
+        createInfo.setPoolSizes(poolSizes)
             .setMaxSets(1);
 
         // TODO:: ERROR CHECK
@@ -450,6 +454,67 @@ namespace XrayEngine
         return buffer;
     }
 
+    vk::Image VulkanRHI::CreateImage(const vk::ImageCreateInfo &createInfo, vk::MemoryPropertyFlags propertyFlags, vk::DeviceMemory &deviceMemory, vk::ImageView &imageView)
+    {
+        vk::Image image = device.createImage(createInfo);
+
+        vk::MemoryRequirements requirements = device.getImageMemoryRequirements(image);
+        vk::MemoryAllocateInfo allocateInfo;
+        allocateInfo.setAllocationSize(requirements.size)
+            .setMemoryTypeIndex(QueryMemoryIndex(requirements, propertyFlags));
+        deviceMemory = device.allocateMemory(allocateInfo);
+        device.bindImageMemory(image, deviceMemory, 0);
+
+        vk::ImageSubresourceRange range;
+        range.setAspectMask(vk::ImageAspectFlagBits::eColor)
+            .setBaseArrayLayer(0)
+            .setLayerCount(1)
+            .setLevelCount(1)
+            .setBaseMipLevel(0);
+        vk::ImageViewCreateInfo imageViewCreateInfo;
+        imageViewCreateInfo.setImage(image)
+            .setViewType(vk::ImageViewType::e2D)
+            .setFormat(createInfo.format)
+            .setSubresourceRange(range);
+        imageView = device.createImageView(imageViewCreateInfo);
+
+        return image;
+    }
+
+    vk::ImageView VulkanRHI::CreateImageView(const vk::ImageViewCreateInfo &createInfo)
+    {
+        vk::ImageView imageView = device.createImageView(createInfo);
+        return imageView;
+    }
+
+    vk::Sampler VulkanRHI::CreateSampler(const vk::SamplerCreateInfo &createInfo)
+    {
+        vk::Sampler sampler = device.createSampler(createInfo);
+        return sampler;
+    }
+
+    vk::Sampler VulkanRHI::CreateDefaultLinearSampler()
+    {
+        vk::PhysicalDeviceProperties physicalDeviceProperties;
+        physicalDeviceProperties = physicalDevice.getProperties();
+
+        vk::SamplerCreateInfo createInfo;
+        createInfo.setMagFilter(vk::Filter::eLinear)
+            .setMinFilter(vk::Filter::eLinear)
+            .setMipmapMode(vk::SamplerMipmapMode::eNearest)
+            .setAddressModeU(vk::SamplerAddressMode::eRepeat)
+            .setAddressModeV(vk::SamplerAddressMode::eRepeat)
+            .setAddressModeW(vk::SamplerAddressMode::eRepeat)
+            .setAnisotropyEnable(false)
+            .setBorderColor(vk::BorderColor::eFloatOpaqueBlack)
+            .setCompareEnable(false)
+            .setUnnormalizedCoordinates(false)
+            .setMaxAnisotropy(physicalDeviceProperties.limits.maxSamplerAnisotropy);
+
+        vk::Sampler sampler = device.createSampler(createInfo);
+        return sampler;
+    }
+
     vk::DescriptorSetLayout VulkanRHI::CreateDescriptorSetLayout(const vk::DescriptorSetLayoutCreateInfo &createInfo)
     {
         vk::DescriptorSetLayout descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
@@ -537,7 +602,7 @@ namespace XrayEngine
         device.freeMemory(deviceMemory);
     }
     
-    void VulkanRHI::UpdateDescriptorSets(std::vector<vk::WriteDescriptorSet> &writes, std::vector<vk::CopyDescriptorSet> &copies)
+    void VulkanRHI::UpdateDescriptorSets(const std::vector<vk::WriteDescriptorSet> &writes, const std::vector<vk::CopyDescriptorSet> &copies)
     {
         device.updateDescriptorSets(writes, copies);
     }
@@ -609,16 +674,20 @@ namespace XrayEngine
     {
         commandBuffer.bindPipeline(bindPoint, pipeline);
     }
-
     
-    void VulkanRHI::CommandBindDescriptorSet(const vk::CommandBuffer &commandBuffer, vk::PipelineBindPoint bindPoint, vk::PipelineLayout layout, uint32_t firstSet, std::vector<vk::DescriptorSet> descriptorSets, std::vector<uint32_t> dynamicOffsets)
+    void VulkanRHI::CommandBindDescriptorSet(const vk::CommandBuffer &commandBuffer, vk::PipelineBindPoint bindPoint, const vk::PipelineLayout &layout, uint32_t firstSet, const std::vector<vk::DescriptorSet> &descriptorSets, std::vector<uint32_t> dynamicOffsets)
     {
         commandBuffer.bindDescriptorSets(bindPoint, layout, firstSet, descriptorSets, dynamicOffsets);
     }
 
-    void VulkanRHI::CommandBindVertexBuffer(const vk::CommandBuffer &commandBuffer, uint32_t firstBinding, std::vector<vk::Buffer> vertexBuffers, std::vector<vk::DeviceSize> offsets)
+    void VulkanRHI::CommandBindVertexBuffers(const vk::CommandBuffer &commandBuffer, uint32_t firstBinding, const std::vector<vk::Buffer> &vertexBuffers, std::vector<vk::DeviceSize> offsets)
     {
         commandBuffer.bindVertexBuffers(firstBinding, vertexBuffers, offsets);
+    }
+
+    void VulkanRHI::CommandBindIndexBuffer(const vk::CommandBuffer &commandBuffer, const vk::Buffer &indexBuffer, vk::DeviceSize offset, vk::IndexType indexType)
+    {
+        commandBuffer.bindIndexBuffer(indexBuffer, offset, indexType);
     }
 
     void VulkanRHI::CommandBeginRenderPass(const vk::CommandBuffer &commandBuffer, const vk::RenderPassBeginInfo &beginInfo, vk::SubpassContents subpassContents)
@@ -636,9 +705,24 @@ namespace XrayEngine
         commandBuffer.draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
+    void VulkanRHI::CommandDrawIndexed(const vk::CommandBuffer &commandBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, uint32_t vertexOffset, uint32_t firstInstance)
+    {
+        commandBuffer.drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    }
+
     void VulkanRHI::CommandCopyBuffer(const vk::CommandBuffer &commandBuffer, const vk::Buffer &srcBuffer, const vk::Buffer &dstBuffer, const vk::BufferCopy &region)
     {
         commandBuffer.copyBuffer(srcBuffer, dstBuffer, region);
+    }
+
+    void VulkanRHI::CommandCopyBufferToImage(const vk::CommandBuffer &commandBuffer, const vk::Buffer &srcBuffer, const vk::Image &dstImage, vk::ImageLayout dstImageLayout, const vk::BufferImageCopy &region)
+    {
+        commandBuffer.copyBufferToImage(srcBuffer, dstImage, dstImageLayout, region);
+    }
+
+    void VulkanRHI::CommandPipelineBarrier(const vk::CommandBuffer &commandBuffer, vk::PipelineStageFlags srcStageMask, vk::PipelineStageFlags dstStageMask, vk::DependencyFlags dependencyFlags, const std::vector<vk::MemoryBarrier> &memoryBarriers, const std::vector<vk::BufferMemoryBarrier> &bufferMemoryBarriers, const std::vector<vk::ImageMemoryBarrier> &imageMemoryBarriers)
+    {
+        commandBuffer.pipelineBarrier(srcStageMask, dstStageMask, dependencyFlags, memoryBarriers, bufferMemoryBarriers, imageMemoryBarriers);
     }
 
     void VulkanRHI::WaitIdle()
@@ -675,7 +759,22 @@ namespace XrayEngine
     {
         device.destroyBuffer(buffer);
     }
-    
+
+    void VulkanRHI::DestroyImage(const vk::Image &image)
+    {
+        device.destroyImage(image);
+    }
+
+    void VulkanRHI::DestroyImageView(const vk::ImageView &imageView)
+    {
+        device.destroyImageView(imageView);
+    }
+
+    void VulkanRHI::DestroySampler(const vk::Sampler &sampler)
+    {
+        device.destroySampler(sampler);
+    }
+
     void VulkanRHI::DestroyDescriptorSetLayout(const vk::DescriptorSetLayout &descriptorSetLayout)
     {
         device.destroyDescriptorSetLayout(descriptorSetLayout);

@@ -6,8 +6,8 @@ using namespace XrayEngine;
 
 struct WindowCreateInfo
 {
-    int width{1280};
-    int height{720};
+    int width{800};
+    int height{800};
     const char *title{"XrayEngine"};
     bool isFullScreen{false};
 };

@@ -3,12 +3,14 @@
 #include <vulkan/vulkan.hpp>
 
 #include "render/interface/vulkanRHI.hpp"
+#include "render/renderResource.hpp"
 
 namespace XrayEngine
 {
     struct RenderPassInitInfo
     {
         std::shared_ptr<VulkanRHI> vulkanRHI;
+        std::shared_ptr<RenderResource> renderResource;
     };
 
     class RenderPass
@@ -24,5 +26,6 @@ namespace XrayEngine
 
     protected:
         std::shared_ptr<VulkanRHI> vulkanRHI;
+        std::shared_ptr<RenderResource> renderResource;
     };
 }

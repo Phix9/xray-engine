@@ -9,10 +9,11 @@ namespace XrayEngine
         RenderPass::Initialize(initInfo);
 
         SetupDescriptorSetLayout();
-        SetupDescriptorSet();
         SetupRenderPass();
         SetupPipelines();
         SetupSwapchainFramebuffers();
+        
+        sampler = vulkanRHI->CreateDefaultLinearSampler();
     }
 
     void MainCameraPass::Quit()
@@ -30,26 +31,15 @@ namespace XrayEngine
         {
             vulkanRHI->DestroyFramebuffer(framebuffer);
         }
+        
+        vulkanRHI->DestroySampler(sampler);
     }
 
-    void MainCameraPass::PreparePassData(const vk::Buffer &vertexBuffer, const vk::Buffer &uniformBuffer)
+    void MainCameraPass::PreparePassData(const vk::Buffer &uniformBuffer)
     {
-        this->vertexBuffer = vertexBuffer;
         this->uniformBuffer = uniformBuffer;
 
-        vk::DescriptorBufferInfo bufferInfo;
-        bufferInfo.setBuffer(uniformBuffer)
-            .setOffset(0)
-            .setRange(sizeof(glm::vec4));
-
-        vk::WriteDescriptorSet write;
-        write.setDescriptorType(vk::DescriptorType::eUniformBuffer)
-            .setBufferInfo(bufferInfo)
-            .setDstSet(descriptorSet)
-            .setDstBinding(0)
-            .setDescriptorCount(1);
-
-        vulkanRHI->UpdateDescriptorSets(std::vector<vk::WriteDescriptorSet>{write}, std::vector<vk::CopyDescriptorSet>{});
+        SetupDescriptorSet();
     }
 
     void MainCameraPass::Draw()
@@ -69,13 +59,15 @@ namespace XrayEngine
 
         vulkanRHI->CommandBeginRenderPass(vulkanRHI->GetCurrentCommandBuffer(), beginInfo, vk::SubpassContents::eInline);
 
-        vulkanRHI->CommandBindDescriptorSet(vulkanRHI->GetCurrentCommandBuffer(), vk::PipelineBindPoint::eGraphics, renderPipelines[eRenderPipelineTypeMesh].layout, 0, std::vector<vk::DescriptorSet>{descriptorSet}, {});
+        vulkanRHI->CommandBindDescriptorSet(vulkanRHI->GetCurrentCommandBuffer(), vk::PipelineBindPoint::eGraphics, renderPipelines[eRenderPipelineTypeMesh].layout, 0, {descriptorSet}, {});
 
         vulkanRHI->CommandBindPipeline(vulkanRHI->GetCurrentCommandBuffer(), vk::PipelineBindPoint::eGraphics, renderPipelines[eRenderPipelineTypeMesh].pipeline);
 
-        vulkanRHI->CommandBindVertexBuffer(vulkanRHI->GetCurrentCommandBuffer(), 0, {vertexBuffer}, {0});
+        vulkanRHI->CommandBindVertexBuffers(vulkanRHI->GetCurrentCommandBuffer(), 0, {renderResource->mesh.vertexBuffer}, {0});
 
-        vulkanRHI->CommandDraw(vulkanRHI->GetCurrentCommandBuffer(), 3, 1, 0, 0);
+        vulkanRHI->CommandBindIndexBuffer(vulkanRHI->GetCurrentCommandBuffer(), renderResource->mesh.indexBuffer, 0, vk::IndexType::eUint16);
+
+        vulkanRHI->CommandDrawIndexed(vulkanRHI->GetCurrentCommandBuffer(), 6, 1, 0, 0, 0);
 
         vulkanRHI->CommandEndRenderPass(vulkanRHI->GetCurrentCommandBuffer());
     }
@@ -151,10 +143,10 @@ namespace XrayEngine
 
         // 2. vertex input
         vk::PipelineVertexInputStateCreateInfo vertexInputStateCreateInfo;
-        vk::VertexInputAttributeDescription attributeDescription = MeshVertex::GetAttributeDescription();
-        vk::VertexInputBindingDescription bindingDescription = MeshVertex::GetBindingDescription();
+        std::vector<vk::VertexInputAttributeDescription> attributeDescription = MeshVertex::GetAttributeDescriptions();
+        std::vector<vk::VertexInputBindingDescription> bindingDescriptions = MeshVertex::GetBindingDescriptions();
         vertexInputStateCreateInfo.setVertexAttributeDescriptions(attributeDescription)
-            .setVertexBindingDescriptions(bindingDescription);
+            .setVertexBindingDescriptions(bindingDescriptions);
 
         // 3. input assembly
         vk::PipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo;
@@ -239,14 +231,20 @@ namespace XrayEngine
 
     void MainCameraPass::SetupDescriptorSetLayout()
     {
-        vk::DescriptorSetLayoutBinding binding;
-        binding.setBinding(0)
+        std::vector<vk::DescriptorSetLayoutBinding> bindings;
+        bindings.resize(2);
+
+        bindings[0].setBinding(0)
             .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+            .setDescriptorCount(1)
+            .setStageFlags(vk::ShaderStageFlagBits::eFragment);
+        bindings[1].setBinding(1)
+            .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
             .setDescriptorCount(1)
             .setStageFlags(vk::ShaderStageFlagBits::eFragment);
 
         vk::DescriptorSetLayoutCreateInfo createInfo;
-        createInfo.setBindings(binding);
+        createInfo.setBindings(bindings);
 
         descriptorSetLayout = vulkanRHI->CreateDescriptorSetLayout(createInfo);
     }
@@ -259,5 +257,31 @@ namespace XrayEngine
             .setSetLayouts(descriptorSetLayout);
 
         descriptorSet = vulkanRHI->AllocateDescriptorSets(allocateInfo);
+
+        vk::DescriptorBufferInfo bufferInfo;
+        bufferInfo.setBuffer(uniformBuffer)
+            .setOffset(0)
+            .setRange(sizeof(glm::vec4));
+
+        vk::DescriptorImageInfo imageInfo;
+        imageInfo.setSampler(sampler)
+            .setImageView(renderResource->texture.imageView)
+            .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+        std::vector<vk::WriteDescriptorSet> writes;
+        writes.resize(2);
+
+        writes[0].setDescriptorType(vk::DescriptorType::eUniformBuffer)
+            .setBufferInfo(bufferInfo)
+            .setDstSet(descriptorSet)
+            .setDstBinding(0)
+            .setDescriptorCount(1);
+        writes[1].setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+            .setImageInfo(imageInfo)
+            .setDstSet(descriptorSet)
+            .setDstBinding(1)
+            .setDescriptorCount(1);
+
+        vulkanRHI->UpdateDescriptorSets(writes, {});
     }
 }
