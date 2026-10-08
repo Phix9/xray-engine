@@ -4,8 +4,10 @@
 #include <memory>
 #include <vulkan/vulkan.hpp>
 
+#include "input/inputSystem.hpp"
 #include "render/interface/vulkanRHI.hpp"
 #include "render/renderResource.hpp"
+#include "render/renderCamera.hpp"
 #include "render/renderPass.hpp"
 #include "render/passes/mainCameraPass.hpp"
 
@@ -13,6 +15,7 @@ namespace XrayEngine
 {
     struct RenderSystemInitInfo
     {
+        std::shared_ptr<InputSystem> inputSystem;
         GLFWwindow *window;
         float windowWidth;
         float windowHeight;
@@ -27,16 +30,13 @@ namespace XrayEngine
         void Initialize(const RenderSystemInitInfo& renderSystemInitInfo);
         void Quit();
 
-        void Render();
+        void RenderTick();
 
     private:
-        void UpdateUniformBuffer();
-
-        vk::Buffer uniformBuffer;
-        vk::DeviceMemory uniformBufferMemory;
-        void *mappedUniformBuffer{nullptr};
+        std::shared_ptr<InputSystem> inputSystem;
 
         std::shared_ptr<VulkanRHI> vulkanRHI;
+        std::shared_ptr<RenderCamera> renderCamera;
         std::shared_ptr<RenderResource> renderResource;
         std::shared_ptr<MainCameraPass> mainCameraPass;
     };

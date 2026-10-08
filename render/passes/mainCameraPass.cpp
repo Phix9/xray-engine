@@ -12,8 +12,7 @@ namespace XrayEngine
         SetupRenderPass();
         SetupPipelines();
         SetupSwapchainFramebuffers();
-        
-        sampler = vulkanRHI->CreateDefaultLinearSampler();
+        SetupDescriptorSet();        
     }
 
     void MainCameraPass::Quit()
@@ -35,11 +34,9 @@ namespace XrayEngine
         vulkanRHI->DestroySampler(sampler);
     }
 
-    void MainCameraPass::PreparePassData(const vk::Buffer &uniformBuffer)
+    void MainCameraPass::PreparePassData()
     {
-        this->uniformBuffer = uniformBuffer;
-
-        SetupDescriptorSet();
+        
     }
 
     void MainCameraPass::Draw()
@@ -232,13 +229,9 @@ namespace XrayEngine
     void MainCameraPass::SetupDescriptorSetLayout()
     {
         std::vector<vk::DescriptorSetLayoutBinding> bindings;
-        bindings.resize(2);
+        bindings.resize(1);
 
         bindings[0].setBinding(0)
-            .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-            .setDescriptorCount(1)
-            .setStageFlags(vk::ShaderStageFlagBits::eFragment);
-        bindings[1].setBinding(1)
             .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
             .setDescriptorCount(1)
             .setStageFlags(vk::ShaderStageFlagBits::eFragment);
@@ -251,6 +244,8 @@ namespace XrayEngine
 
     void MainCameraPass::SetupDescriptorSet()
     {
+        sampler = vulkanRHI->CreateDefaultLinearSampler();
+
         vk::DescriptorSetAllocateInfo allocateInfo;
         allocateInfo.setDescriptorPool(vulkanRHI->GetDescriptorPool())
             .setDescriptorSetCount(1)
@@ -258,28 +253,18 @@ namespace XrayEngine
 
         descriptorSet = vulkanRHI->AllocateDescriptorSets(allocateInfo);
 
-        vk::DescriptorBufferInfo bufferInfo;
-        bufferInfo.setBuffer(uniformBuffer)
-            .setOffset(0)
-            .setRange(sizeof(glm::vec4));
-
         vk::DescriptorImageInfo imageInfo;
         imageInfo.setSampler(sampler)
             .setImageView(renderResource->texture.imageView)
             .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
 
         std::vector<vk::WriteDescriptorSet> writes;
-        writes.resize(2);
+        writes.resize(1);
 
-        writes[0].setDescriptorType(vk::DescriptorType::eUniformBuffer)
-            .setBufferInfo(bufferInfo)
-            .setDstSet(descriptorSet)
-            .setDstBinding(0)
-            .setDescriptorCount(1);
-        writes[1].setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+        writes[0].setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
             .setImageInfo(imageInfo)
             .setDstSet(descriptorSet)
-            .setDstBinding(1)
+            .setDstBinding(0)
             .setDescriptorCount(1);
 
         vulkanRHI->UpdateDescriptorSets(writes, {});

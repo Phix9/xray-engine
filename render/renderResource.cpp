@@ -174,6 +174,16 @@ namespace XrayEngine
         vulkanRHI->FreeMemory(stagingBufferMemory);
     }
 
+    void RenderResource::UpdatePerFrameBuffer(std::shared_ptr<RenderCamera> camera)
+    {
+        glm::mat4 viewMatrix = camera->GetViewMatrix();
+        glm::mat4 projectMatrix = camera->GetProjectMatrix();
+        glm::vec3 cameraPosition = camera->GetPosition();
+
+        meshPerFrameStorageBufferObject.projectViewMatrix = projectMatrix * viewMatrix;
+        meshPerFrameStorageBufferObject.cameraPosition = cameraPosition;
+    }
+
     void RenderResource::TransitionImageLayout(vk::Image image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout)
     {
         vk::CommandBuffer commandBuffer = vulkanRHI->BeginOneTimeCommandBuffer();

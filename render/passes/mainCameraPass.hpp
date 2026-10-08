@@ -37,13 +37,10 @@ namespace XrayEngine
         void Initialize(const RenderPassInitInfo *initInfo) override final;
         void Quit();
 
-        void PreparePassData(const vk::Buffer &uniformBuffer);
+        void PreparePassData();
         void Draw();
 
     private:
-        vk::Buffer vertexBuffer;
-        vk::Buffer indexBuffer;
-        vk::Buffer uniformBuffer;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorSet descriptorSet;
         vk::Sampler sampler;

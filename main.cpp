@@ -21,8 +21,14 @@ int main()
     GLFWwindow* window;
     InitializeWindow(window, createInfo);
 
+    InputSystemInitInfo inputSystemInitInfo;
+    inputSystemInitInfo.window = window;
+    std::shared_ptr<InputSystem> inputSystem = std::make_shared<InputSystem>();
+    inputSystem->Initialize(inputSystemInitInfo);
+
     RenderSystemInitInfo renderSystemInitInfo;
     renderSystemInitInfo.window = window;
+    renderSystemInitInfo.inputSystem = inputSystem;
     renderSystemInitInfo.windowWidth = (float)createInfo.width;
     renderSystemInitInfo.windowHeight = (float)createInfo.height;
     std::shared_ptr<RenderSystem> renderSystem = std::make_shared<RenderSystem>();
@@ -31,7 +37,9 @@ int main()
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
-        renderSystem->Render();
+
+        inputSystem->ProcessInput();
+        renderSystem->RenderTick();
     }
 
     renderSystem->Quit();
