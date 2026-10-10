@@ -1,5 +1,6 @@
 #pragma once
 
+#include "render/renderHelper.hpp"
 #include "render/renderPass.hpp"
 #include "render/renderMesh.hpp"
 
@@ -11,22 +12,29 @@ namespace XrayEngine
 
     class MainCameraPass : public RenderPass
     {
-        enum
+        enum MainCameraPassAttachment : uint8_t
         {
             eMainCameraPassAttachmentSwapchainImage = 0,
             eMainCameraPassAttachmentCount = 1,
         };
 
-        enum
+        enum MainCameraSubpass : uint8_t
         {
             eMainCameraSubpassBasePass = 0,
             eMainCameraSubpassCount = 1,
         };
 
-        enum
+        enum RenderPipelineType : uint8_t
         {
             eRenderPipelineTypeMesh = 0,
             eRenderPipelineTypeCount = 1,
+        };
+
+        enum DescriptorSetLayoutType : uint8_t
+        {
+            eDescriptorSetLayoutPerFrame = 0,
+            eDescriptorSetLayoutPerMesh = 1,
+            eDescriptorSetLayoutCount = 2,
         };
 
     public:
@@ -41,8 +49,8 @@ namespace XrayEngine
         void Draw();
 
     private:
-        vk::DescriptorSetLayout descriptorSetLayout;
-        vk::DescriptorSet descriptorSet;
+        std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;
+        std::vector<vk::DescriptorSet> descriptorSets;
         vk::Sampler sampler;
 
         void SetupRenderPass();

@@ -1,5 +1,7 @@
 #include <render/renderCamera.hpp>
 
+#include <iostream>
+
 namespace XrayEngine
 {
     void RenderCamera::Initialize(RenderCameraInitInfo initInfo)
@@ -8,14 +10,24 @@ namespace XrayEngine
     }
 
     void RenderCamera::Update()
-    {
+    {    
         Move();
         Rotate();
     }
 
     void RenderCamera::Move()
     {
-        position += (inputSystem->GetInputData().moveDirection * moveSpeed);
+        const glm::vec3 inputDirection = inputSystem->GetInputData().moveDirection;
+
+        const glm::vec3 forward = rotation * RenderCamera::Y;
+        const glm::vec3 right = rotation * RenderCamera::X;
+        const glm::vec3 up = rotation * upAxis;
+
+        const glm::vec3 worldMoveDirection = forward * inputDirection.x +
+                                             right * inputDirection.y +
+                                             up * inputDirection.z;
+
+        position += worldMoveDirection * moveSpeed;
     }
 
     void RenderCamera::Rotate()
@@ -45,33 +57,33 @@ namespace XrayEngine
         const glm::vec3 f = rotation * RenderCamera::Y;
         const glm::vec3 s = glm::cross(f, u);
 
-        glm::mat4 view{0.0f};
+        glm::mat4 view{1.0f};
         view[0][0] = s.x;
-        view[0][1] = s.y;
-        view[0][2] = s.z;
-        view[0][3] = glm::dot(-s, position);
-        view[1][0] = u.x;
+        view[1][0] = s.y;
+        view[2][0] = s.z;
+        view[3][0] = glm::dot(-s, position);
+        view[0][1] = u.x;
         view[1][1] = u.y;
-        view[1][2] = u.z;
-        view[1][3] = glm::dot(-u, position);
-        view[2][0] = -f.x;
-        view[2][1] = -f.y;
+        view[2][1] = u.z;
+        view[3][1] = glm::dot(-u, position);
+        view[0][2] = -f.x;
+        view[1][2] = -f.y;
         view[2][2] = -f.z;
-        view[2][3] = glm::dot(f, position);
+        view[3][2] = glm::dot(f, position);
 
         return view;
     }
     
     glm::mat4 RenderCamera::GetProjectMatrix()
     {
-        float t = std::tan(fov / 2.0f);
+        float t = std::tan(glm::radians(fov) / 2.0f);
 
         glm::mat4 project{0.0f};
         project[0][0] = 1.0f / (aspect * t);
-        project[1][1] = 1 / t;
-        project[2][2] = -zFar / (zNear - zFar);
-        project[2][3] = -(zFar * zNear) / (zFar - zNear);
-        project[3][2] = -1.0f;
+        project[1][1] = -1.0 / t;
+        project[2][2] = zFar / (zNear - zFar);
+        project[3][2] = -(zFar * zNear) / (zFar - zNear);
+        project[2][3] = -1.0f;
 
         return project;
     }

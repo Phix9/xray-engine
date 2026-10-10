@@ -38,6 +38,22 @@ namespace XrayEngine
         vk::DeviceMemory memory;
     };
 
+    struct Storage
+    {
+        uint32_t minUniformBufferOffsetAlignment;
+        uint32_t minStorageBufferOffsetAlignment;
+        uint32_t maxStorageBufferRange;
+
+        std::vector<uint32_t> ringBufferBegins;
+        std::vector<uint32_t> ringBufferEnds;
+        std::vector<uint32_t> ringBufferSizes;
+
+        vk::Buffer ringBuffer;
+        vk::DeviceMemory ringBufferMemory;
+
+        void* mappedMemory;
+    };
+
     struct MeshPerFrameStorageBufferObject
     {
         glm::mat4 projectViewMatrix;
@@ -55,6 +71,7 @@ namespace XrayEngine
 
         Mesh mesh;
         Texture texture;
+        Storage storage;
 
         MeshPerFrameStorageBufferObject meshPerFrameStorageBufferObject;
 
@@ -64,6 +81,8 @@ namespace XrayEngine
         void CreateMeshes(const std::vector<MeshVertex> &meshData);
         void CreateIndices(const std::vector<uint16_t> &indices);
         void CreateTextures(const TextureData &textureData);
+        void CreateStorageBuffer();
+        void ResetRingBufferOffset();
         void UpdatePerFrameBuffer(std::shared_ptr<RenderCamera> camera);
         void TransitionImageLayout(vk::Image image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
     };

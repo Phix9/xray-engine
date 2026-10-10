@@ -18,7 +18,11 @@ namespace XrayEngine
     void MainCameraPass::Quit()
     {
         vulkanRHI->DestroyRenderPass(renderPass);
-        vulkanRHI->DestroyDescriptorSetLayout(descriptorSetLayout);
+        
+        for(const vk::DescriptorSetLayout &layout : descriptorSetLayouts)
+        {
+            vulkanRHI->DestroyDescriptorSetLayout(layout);
+        }
 
         for (const RenderPipeline &renderPipeline : renderPipelines)
         {
@@ -34,13 +38,20 @@ namespace XrayEngine
         vulkanRHI->DestroySampler(sampler);
     }
 
-    void MainCameraPass::PreparePassData()
-    {
-        
-    }
-
     void MainCameraPass::Draw()
     {
+        uint32_t perFrameDynamicOffset = RoundUp(renderResource->storage
+            .ringBufferEnds[vulkanRHI->GetCurrentFrameIndex()],
+            renderResource->storage.minStorageBufferOffsetAlignment);
+
+        renderResource->storage.ringBufferEnds[vulkanRHI->GetCurrentFrameIndex()] =
+            perFrameDynamicOffset + sizeof(MeshPerFrameStorageBufferObject);
+
+        (*reinterpret_cast<MeshPerFrameStorageBufferObject*>(
+            reinterpret_cast<uintptr_t>(
+                renderResource-> storage.mappedMemory) +
+            perFrameDynamicOffset)) = renderResource->meshPerFrameStorageBufferObject;
+
         vk::Rect2D renderArea;
         renderArea.setOffset({0, 0})
             .setExtent(vulkanRHI->GetSwapchainInfo().extent);
@@ -56,15 +67,19 @@ namespace XrayEngine
 
         vulkanRHI->CommandBeginRenderPass(vulkanRHI->GetCurrentCommandBuffer(), beginInfo, vk::SubpassContents::eInline);
 
-        vulkanRHI->CommandBindDescriptorSet(vulkanRHI->GetCurrentCommandBuffer(), vk::PipelineBindPoint::eGraphics, renderPipelines[eRenderPipelineTypeMesh].layout, 0, {descriptorSet}, {});
+        vulkanRHI->CommandBindDescriptorSet(vulkanRHI->GetCurrentCommandBuffer(), vk::PipelineBindPoint::eGraphics, renderPipelines[eRenderPipelineTypeMesh].layout, 0, {descriptorSets}, {perFrameDynamicOffset});
 
         vulkanRHI->CommandBindPipeline(vulkanRHI->GetCurrentCommandBuffer(), vk::PipelineBindPoint::eGraphics, renderPipelines[eRenderPipelineTypeMesh].pipeline);
+
+        vulkanRHI->CommandSetViewport(vulkanRHI->GetCurrentCommandBuffer(), 0, {vulkanRHI->GetSwapchainInfo().viewport});
+
+        vulkanRHI->CommandSetScissor(vulkanRHI->GetCurrentCommandBuffer(), 0, {vulkanRHI->GetSwapchainInfo().scissor});
 
         vulkanRHI->CommandBindVertexBuffers(vulkanRHI->GetCurrentCommandBuffer(), 0, {renderResource->mesh.vertexBuffer}, {0});
 
         vulkanRHI->CommandBindIndexBuffer(vulkanRHI->GetCurrentCommandBuffer(), renderResource->mesh.indexBuffer, 0, vk::IndexType::eUint16);
 
-        vulkanRHI->CommandDrawIndexed(vulkanRHI->GetCurrentCommandBuffer(), 6, 1, 0, 0, 0);
+        vulkanRHI->CommandDrawIndexed(vulkanRHI->GetCurrentCommandBuffer(), 36, 1, 0, 0, 0);
 
         vulkanRHI->CommandEndRenderPass(vulkanRHI->GetCurrentCommandBuffer());
     }
@@ -124,7 +139,7 @@ namespace XrayEngine
 
         // layout (default)
         vk::PipelineLayoutCreateInfo layoutCreateInfo;
-        layoutCreateInfo.setSetLayouts(descriptorSetLayout);
+        layoutCreateInfo.setSetLayouts(descriptorSetLayouts);
         renderPipelines[eRenderPipelineTypeMesh].layout = vulkanRHI->CreatePipelineLayout(layoutCreateInfo);
 
         // 1. shader
@@ -188,7 +203,11 @@ namespace XrayEngine
             .setDepthBoundsTestEnable(false)
             .setStencilTestEnable(false);
 
-        // TODO:: 9. Dynamic state (Maybe)
+        // 9. dynamic state: viewport/scissor are re-specified every frame so that a
+        // window resize does not require rebuilding the pipeline.
+        std::vector<vk::DynamicState> dynamicStates{vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        vk::PipelineDynamicStateCreateInfo dynamicStateCreateInfo;
+        dynamicStateCreateInfo.setDynamicStates(dynamicStates);
 
         vk::GraphicsPipelineCreateInfo createInfo;
         createInfo.setPVertexInputState(&vertexInputStateCreateInfo)
@@ -199,6 +218,7 @@ namespace XrayEngine
             .setPMultisampleState(&multisampleStateCreateInfo)
             .setPColorBlendState(&colorBlendCreateInfo)
             .setPDepthStencilState(&depthStencilStateCreateInfo)
+            .setPDynamicState(&dynamicStateCreateInfo)
             .setRenderPass(renderPass)
             .setSubpass(eMainCameraSubpassBasePass)
             .setLayout(renderPipelines[eRenderPipelineTypeMesh].layout);
@@ -228,45 +248,93 @@ namespace XrayEngine
 
     void MainCameraPass::SetupDescriptorSetLayout()
     {
-        std::vector<vk::DescriptorSetLayoutBinding> bindings;
-        bindings.resize(1);
+        descriptorSetLayouts.resize(eDescriptorSetLayoutCount);
 
-        bindings[0].setBinding(0)
-            .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-            .setDescriptorCount(1)
-            .setStageFlags(vk::ShaderStageFlagBits::eFragment);
+        {
+            std::vector<vk::DescriptorSetLayoutBinding> perFrameBindings;
+            perFrameBindings.resize(1);
 
-        vk::DescriptorSetLayoutCreateInfo createInfo;
-        createInfo.setBindings(bindings);
+            perFrameBindings[0].setBinding(0)
+                .setDescriptorType(vk::DescriptorType::eStorageBufferDynamic)
+                .setDescriptorCount(1)
+                .setStageFlags(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
+         
+            vk::DescriptorSetLayoutCreateInfo createInfo;
+            createInfo.setBindings(perFrameBindings);
 
-        descriptorSetLayout = vulkanRHI->CreateDescriptorSetLayout(createInfo);
+            descriptorSetLayouts[eDescriptorSetLayoutPerFrame] = vulkanRHI->CreateDescriptorSetLayout(createInfo);
+        }
+
+        {
+            std::vector<vk::DescriptorSetLayoutBinding> perMeshBindings;
+            perMeshBindings.resize(1);
+
+            perMeshBindings[0].setBinding(0)
+                .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                .setDescriptorCount(1)
+                .setStageFlags(vk::ShaderStageFlagBits::eFragment);
+
+            vk::DescriptorSetLayoutCreateInfo createInfo;
+            createInfo.setBindings(perMeshBindings);
+
+            descriptorSetLayouts[eDescriptorSetLayoutPerMesh] = vulkanRHI->CreateDescriptorSetLayout(createInfo);
+        }
     }
 
     void MainCameraPass::SetupDescriptorSet()
     {
-        sampler = vulkanRHI->CreateDefaultLinearSampler();
+        descriptorSets.resize(eDescriptorSetLayoutCount);
 
-        vk::DescriptorSetAllocateInfo allocateInfo;
-        allocateInfo.setDescriptorPool(vulkanRHI->GetDescriptorPool())
-            .setDescriptorSetCount(1)
-            .setSetLayouts(descriptorSetLayout);
+        {
+            vk::DescriptorSetAllocateInfo allocateInfo;
+            allocateInfo.setDescriptorPool(vulkanRHI->GetDescriptorPool())
+                .setDescriptorSetCount(1)
+                .setSetLayouts(descriptorSetLayouts[eDescriptorSetLayoutPerFrame]);
 
-        descriptorSet = vulkanRHI->AllocateDescriptorSets(allocateInfo);
+            descriptorSets[eDescriptorSetLayoutPerFrame] = vulkanRHI->AllocateDescriptorSets(allocateInfo);
 
-        vk::DescriptorImageInfo imageInfo;
-        imageInfo.setSampler(sampler)
-            .setImageView(renderResource->texture.imageView)
-            .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+            vk::DescriptorBufferInfo bufferInfo;
+            bufferInfo.setOffset(0)
+                .setRange(sizeof(MeshPerFrameStorageBufferObject))
+                .setBuffer(renderResource->storage.ringBuffer);
 
-        std::vector<vk::WriteDescriptorSet> writes;
-        writes.resize(1);
+            std::vector<vk::WriteDescriptorSet> writes;
+            writes.resize(1);
 
-        writes[0].setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-            .setImageInfo(imageInfo)
-            .setDstSet(descriptorSet)
-            .setDstBinding(0)
-            .setDescriptorCount(1);
+            writes[0].setDescriptorType(vk::DescriptorType::eStorageBufferDynamic)
+                .setBufferInfo(bufferInfo)
+                .setDstSet(descriptorSets[eDescriptorSetLayoutPerFrame])
+                .setDstBinding(0)
+                .setDescriptorCount(1);
 
-        vulkanRHI->UpdateDescriptorSets(writes, {});
+            vulkanRHI->UpdateDescriptorSets(writes, {});
+        }
+
+        {
+            sampler = vulkanRHI->CreateDefaultLinearSampler();
+
+            vk::DescriptorSetAllocateInfo allocateInfo;
+            allocateInfo.setDescriptorPool(vulkanRHI->GetDescriptorPool())
+                .setDescriptorSetCount(1)
+                .setSetLayouts(descriptorSetLayouts[eDescriptorSetLayoutPerMesh]);
+
+            descriptorSets[eDescriptorSetLayoutPerMesh] = vulkanRHI->AllocateDescriptorSets(allocateInfo);
+
+            vk::DescriptorImageInfo imageInfo;
+            imageInfo.setSampler(sampler)
+                .setImageView(renderResource->texture.imageView)
+                .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+            std::vector<vk::WriteDescriptorSet> writes;
+            writes.resize(1);
+
+            writes[0].setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                .setImageInfo(imageInfo)
+                .setDstSet(descriptorSets[eDescriptorSetLayoutPerMesh])
+                .setDstBinding(0)
+                .setDescriptorCount(1);
+
+            vulkanRHI->UpdateDescriptorSets(writes, {});
+        }
     }
 }

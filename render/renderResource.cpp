@@ -2,6 +2,9 @@
 
 #include "render/renderResource.hpp"
 
+#include <algorithm>
+#include <cstring>
+
 namespace XrayEngine
 {
     void RenderResource::Initialize(RenderResourceInitInfo initInfo)
@@ -28,6 +31,17 @@ namespace XrayEngine
             vulkanRHI->DestroyImageView(texture.imageView);
             vulkanRHI->DestroyImage(texture.image);
             vulkanRHI->FreeMemory(texture.memory);
+        }
+
+        if (storage.ringBuffer)
+        {
+            if (storage.mappedMemory)
+            {
+                vulkanRHI->UnmapMemory(storage.ringBufferMemory);
+                storage.mappedMemory = nullptr;
+            }
+            vulkanRHI->DestroyBuffer(storage.ringBuffer);
+            vulkanRHI->FreeMemory(storage.ringBufferMemory);
         }
 
         for (Mesh &m : meshes)
@@ -172,6 +186,43 @@ namespace XrayEngine
     
         vulkanRHI->DestroyBuffer(stagingBuffer);
         vulkanRHI->FreeMemory(stagingBufferMemory);
+    }
+
+    void RenderResource::CreateStorageBuffer()
+    {
+        const uint32_t frameCount = vulkanRHI->GetFramesInFlightCount();
+        const uint32_t objectSize = sizeof(MeshPerFrameStorageBufferObject);
+
+        vk::PhysicalDeviceProperties properties = vulkanRHI->GetPhysicalDeviceProperties();
+        storage.minUniformBufferOffsetAlignment = static_cast<uint32_t>(properties.limits.minUniformBufferOffsetAlignment);
+        storage.minStorageBufferOffsetAlignment = static_cast<uint32_t>(properties.limits.minStorageBufferOffsetAlignment);
+        storage.maxStorageBufferRange = properties.limits.maxStorageBufferRange;
+
+        const uint32_t bufferSize = 1024 * 1024 * 128;
+
+        vk::BufferCreateInfo createInfo;
+        createInfo.setSize(bufferSize)
+            .setUsage(vk::BufferUsageFlagBits::eStorageBuffer)
+            .setSharingMode(vk::SharingMode::eExclusive);
+        storage.ringBuffer = vulkanRHI->CreateBuffer(createInfo, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, storage.ringBufferMemory);
+
+        uint32_t framesInFlight = vulkanRHI->GetFramesInFlightCount();
+        storage.ringBufferBegins.resize(framesInFlight);
+        storage.ringBufferEnds.resize(framesInFlight);
+        storage.ringBufferSizes.resize(framesInFlight);
+
+        for(uint32_t i = 0; i < framesInFlight; i++)
+        {
+            storage.ringBufferBegins[i] = (bufferSize * i) / framesInFlight;
+            storage.ringBufferSizes[i] = (bufferSize * (i + 1)) / framesInFlight - (bufferSize * i) / framesInFlight;
+        }
+
+        storage.mappedMemory = vulkanRHI->MapMemory(storage.ringBufferMemory, 0, bufferSize);
+    }
+
+    void RenderResource::ResetRingBufferOffset()
+    {
+        storage.ringBufferEnds[vulkanRHI->GetCurrentFrameIndex()] = storage.ringBufferBegins[vulkanRHI->GetCurrentFrameIndex()];
     }
 
     void RenderResource::UpdatePerFrameBuffer(std::shared_ptr<RenderCamera> camera)

@@ -29,7 +29,7 @@ namespace XrayEngine
     private:
         std::shared_ptr<InputSystem> inputSystem;
 
-        glm::vec3 position{0.0f, 0.0f, 0.0f};
+        glm::vec3 position{0.0f, -2.0f, 0.0f};
         glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
         glm::vec3 upAxis{Z};
 
@@ -39,7 +39,7 @@ namespace XrayEngine
         float fov{90.0f};
         float aspect{1.0f};
 
-        float moveSpeed{1.0f};
+        float moveSpeed{0.001f};
         float rotateSpeed{0.0025f};
 
         float yaw{0.0f};

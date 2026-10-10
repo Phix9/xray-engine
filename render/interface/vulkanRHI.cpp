@@ -235,16 +235,18 @@ namespace XrayEngine
     void VulkanRHI::CreateDescriptorPool()
     {
         std::vector<vk::DescriptorPoolSize> poolSizes;
-        poolSizes.resize(2);
+        poolSizes.resize(3);
 
         poolSizes[0].setType(vk::DescriptorType::eUniformBuffer)
             .setDescriptorCount(1);
-        poolSizes[1].setType(vk::DescriptorType::eCombinedImageSampler)
+        poolSizes[1].setType(vk::DescriptorType::eStorageBufferDynamic)
+            .setDescriptorCount(1);
+        poolSizes[2].setType(vk::DescriptorType::eCombinedImageSampler)
             .setDescriptorCount(1);
 
         vk::DescriptorPoolCreateInfo createInfo;
         createInfo.setPoolSizes(poolSizes)
-            .setMaxSets(1);
+            .setMaxSets(2);
 
         // TODO:: ERROR CHECK
         descriptorPool = device.createDescriptorPool(createInfo);
@@ -547,6 +549,21 @@ namespace XrayEngine
         return currentSwapchainImageIndex;
     }
 
+    uint32_t VulkanRHI::GetFramesInFlightCount() const
+    {
+        return maxFramesInFlight;
+    }
+
+    uint32_t VulkanRHI::GetCurrentFrameIndex() const
+    {
+        return currentFrame;
+    }
+
+    const vk::PhysicalDeviceProperties& VulkanRHI::GetPhysicalDeviceProperties()
+    {
+        return physicalDevice.getProperties();
+    }
+
     const vk::CommandBuffer& VulkanRHI::GetCurrentCommandBuffer()
     {
         return commandBuffers[currentFrame];
@@ -688,6 +705,16 @@ namespace XrayEngine
     void VulkanRHI::CommandBindIndexBuffer(const vk::CommandBuffer &commandBuffer, const vk::Buffer &indexBuffer, vk::DeviceSize offset, vk::IndexType indexType)
     {
         commandBuffer.bindIndexBuffer(indexBuffer, offset, indexType);
+    }
+
+    void VulkanRHI::CommandSetViewport(const vk::CommandBuffer &commandBuffer, uint32_t firstViewport, const std::vector<vk::Viewport> &viewports)
+    {
+        commandBuffer.setViewport(firstViewport, viewports);
+    }
+
+    void VulkanRHI::CommandSetScissor(const vk::CommandBuffer &commandBuffer, uint32_t firstScissor, const std::vector<vk::Rect2D> &scissors)
+    {
+        commandBuffer.setScissor(firstScissor, scissors);
     }
 
     void VulkanRHI::CommandBeginRenderPass(const vk::CommandBuffer &commandBuffer, const vk::RenderPassBeginInfo &beginInfo, vk::SubpassContents subpassContents)

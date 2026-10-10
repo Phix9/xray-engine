@@ -59,6 +59,9 @@ namespace XrayEngine
         VulkanRHISwapchainDescription GetSwapchainInfo();
         const std::vector<vk::ImageView>& GetSwapchainImageViews();
         uint32_t GetCurrentSwapchainImageIndex();
+        uint32_t GetFramesInFlightCount() const;
+        uint32_t GetCurrentFrameIndex() const;
+        const vk::PhysicalDeviceProperties& GetPhysicalDeviceProperties();
         const vk::CommandBuffer& GetCurrentCommandBuffer();
         const vk::DescriptorPool& GetDescriptorPool();
         vk::CommandBuffer BeginOneTimeCommandBuffer();
@@ -73,6 +76,8 @@ namespace XrayEngine
         void CommandBindDescriptorSet(const vk::CommandBuffer &commandBUffer, vk::PipelineBindPoint bindPoint, const vk::PipelineLayout &layout, uint32_t firstSet, const std::vector<vk::DescriptorSet> &descriptorSets, std::vector<uint32_t> dynamicOffsets);
         void CommandBindVertexBuffers(const vk::CommandBuffer &commandBuffer, uint32_t firstBinding, const std::vector<vk::Buffer> &vertexBuffers, std::vector<vk::DeviceSize> offsets);
         void CommandBindIndexBuffer(const vk::CommandBuffer &commandBuffer, const vk::Buffer &indexBuffer, vk::DeviceSize offset, vk::IndexType indexType);
+        void CommandSetViewport(const vk::CommandBuffer &commandBuffer, uint32_t firstViewport, const std::vector<vk::Viewport> &viewports);
+        void CommandSetScissor(const vk::CommandBuffer &commandBuffer, uint32_t firstScissor, const std::vector<vk::Rect2D> &scissors);
         void CommandBeginRenderPass(const vk::CommandBuffer &commandBuffer, const vk::RenderPassBeginInfo &beginInfo, vk::SubpassContents subpassContents);
         void CommandEndRenderPass(const vk::CommandBuffer &commandBuffer);
         void CommandDraw(const vk::CommandBuffer &commandBuffer, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);

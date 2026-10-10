@@ -56,6 +56,11 @@ namespace XrayEngine
         }
     }
 
+    InputData InputSystem::GetInputData()
+    {
+        return inputData;
+    }
+
     void InputSystem::MouseMovementCallback(GLFWwindow *window, double xposIn, double yposIn)
     {
         InputSystem *inputSystem = static_cast<InputSystem*>(glfwGetWindowUserPointer(window));

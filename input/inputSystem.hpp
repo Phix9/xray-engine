@@ -10,14 +10,14 @@ namespace XrayEngine
         GLFWwindow *window;
     };
 
+    struct InputData
+    {
+        glm::vec3 moveDirection{0.0f, 0.0f, 0.0f};
+        glm::vec2 mouseMovementDelta{0.0f, 0.0f};
+    };
+
     class InputSystem
     {
-        struct InputData
-        {
-            glm::vec3 moveDirection{0.0f, 0.0f, 0.0f};
-            glm::vec2 mouseMovementDelta{0.0f, 0.0f};
-        };
-
     public:
         void Initialize(InputSystemInitInfo initInfo);
         void ProcessInput();
