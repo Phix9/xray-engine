@@ -50,13 +50,14 @@ namespace XrayEngine
         vk::PipelineLayout CreatePipelineLayout(const vk::PipelineLayoutCreateInfo &createInfo);
         vk::Framebuffer CreateFramebuffer(const vk::FramebufferCreateInfo &createInfo);
         vk::Buffer CreateBuffer(const vk::BufferCreateInfo &createInfo, vk::MemoryPropertyFlags propertyFlags, vk::DeviceMemory &deviceMemory);
-        vk::Image CreateImage(const vk::ImageCreateInfo &createInfo, vk::MemoryPropertyFlags propertyFlags, vk::DeviceMemory &deviceMemory, vk::ImageView &imageView);
+        vk::Image CreateImage(const vk::ImageCreateInfo &createInfo, vk::MemoryPropertyFlags propertyFlags, vk::DeviceMemory &deviceMemory);
         vk::ImageView CreateImageView(const vk::ImageViewCreateInfo &createInfo);
         vk::Sampler CreateSampler(const vk::SamplerCreateInfo &createInfo);
         vk::Sampler CreateDefaultLinearSampler();
         vk::DescriptorSetLayout CreateDescriptorSetLayout(const vk::DescriptorSetLayoutCreateInfo &createInfo);
         vk::DescriptorSet AllocateDescriptorSets(const vk::DescriptorSetAllocateInfo &allocateInfo);
         VulkanRHISwapchainDescription GetSwapchainInfo();
+        vulkanRHIDepthImageDescription GetDepthImageInfo();
         const std::vector<vk::ImageView>& GetSwapchainImageViews();
         uint32_t GetCurrentSwapchainImageIndex();
         uint32_t GetFramesInFlightCount() const;
@@ -109,10 +110,14 @@ namespace XrayEngine
         vk::Queue presentQueue;
         vk::SurfaceKHR surface;
         vk::SwapchainKHR swapchain;
-        vk::Extent2D extent;
-        vk::Format format;
+        vk::Extent2D swapchainExtent;
+        vk::Format swapchainFormat;
+        vk::Format depthImageFormat;
         vk::Viewport viewport;
         vk::Rect2D scissor;
+        vk::Image depthImage;
+        vk::ImageView depthImageView;
+        vk::DeviceMemory depthImageMemory;
         std::vector<vk::Image> swapchainImages;
         std::vector<vk::ImageView> swapchainImageViews;
         std::vector<vk::Semaphore> imageAvailableSemaphores{maxFramesInFlight};
@@ -131,6 +136,7 @@ namespace XrayEngine
         void CreateWindowSurface();
         void CreateSwapchain();
         void CreateSwapchainImageViews();
+        void CreateFramebufferImageAndView();
         void CreateCommandPool();
         void CreateSemaphores();
         void CreateFences();
@@ -145,5 +151,6 @@ namespace XrayEngine
         SwapchainSupportDetails QuerySwapchainSupport();
         uint32_t QueryMemoryIndex(const vk::MemoryRequirements &requirements, vk::MemoryPropertyFlags propertyFlags);
         vk::Extent2D ChooseSwapchainExtent(const vk::SurfaceCapabilitiesKHR &capabilities);
+        vk::Format FindSupportedFormat(const std::vector<vk::Format> &candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
     };
 }

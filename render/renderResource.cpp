@@ -159,8 +159,22 @@ namespace XrayEngine
             .setUsage(vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled)
             .setSamples(vk::SampleCountFlagBits::e1);
 
-        texture.image = vulkanRHI->CreateImage(createInfo, vk::MemoryPropertyFlagBits::eDeviceLocal, texture.memory, texture.imageView);
+        texture.image = vulkanRHI->CreateImage(createInfo, vk::MemoryPropertyFlagBits::eDeviceLocal, texture.memory);
         
+        vk::ImageSubresourceRange range;
+        range.setAspectMask(vk::ImageAspectFlagBits::eColor)
+            .setBaseArrayLayer(0)
+            .setLayerCount(1)
+            .setLevelCount(1)
+            .setBaseMipLevel(0);
+        vk::ImageViewCreateInfo imageViewCreateInfo;
+        imageViewCreateInfo.setImage(texture.image)
+            .setViewType(vk::ImageViewType::e2D)
+            .setFormat(createInfo.format)
+            .setSubresourceRange(range);
+        
+        texture.imageView = vulkanRHI->CreateImageView(imageViewCreateInfo);
+
         TransitionImageLayout(texture.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
 
         vk::CommandBuffer commandBuffer = vulkanRHI->BeginOneTimeCommandBuffer();

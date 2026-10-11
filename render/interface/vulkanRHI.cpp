@@ -18,6 +18,7 @@ namespace XrayEngine
         CreateFences();
         CreateSwapchain();
         CreateSwapchainImageViews();
+        CreateFramebufferImageAndView();
     }
 
     void VulkanRHI::Quit()
@@ -34,6 +35,11 @@ namespace XrayEngine
         {
             device.destroyImageView(imageView);
         }
+
+        device.destroyImageView(depthImageView);
+        device.destroyImage(depthImage);
+        device.freeMemory(depthImageMemory);
+
         device.destroyDescriptorPool(descriptorPool);
         device.destroySwapchainKHR(swapchain);
         instance.destroySurfaceKHR(surface);
@@ -119,6 +125,10 @@ namespace XrayEngine
 
         graphicsQueue = device.getQueue(queueFamilyIndices.graphicsFamily.value(), 0);
         presentQueue = device.getQueue(queueFamilyIndices.presentFamily.value(), 0);
+
+        depthImageFormat = FindSupportedFormat({vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint, vk::Format::eD24UnormS8Uint},
+                                               vk::ImageTiling::eOptimal,
+                                               vk::FormatFeatureFlagBits::eDepthStencilAttachment);
     }
 
     void VulkanRHI::CreateWindowSurface()
@@ -168,8 +178,8 @@ namespace XrayEngine
         swapchain = device.createSwapchainKHR(createInfo);
 
         swapchainImages = device.getSwapchainImagesKHR(swapchain);
-        extent = chosenExtent;
-        format = swapchainSupportDetails.surfaceFormat.format;
+        swapchainExtent = chosenExtent;
+        swapchainFormat = swapchainSupportDetails.surfaceFormat.format;
     }
 
     void VulkanRHI::CreateSwapchainImageViews()
@@ -190,10 +200,44 @@ namespace XrayEngine
             createInfo.setImage(swapchainImages[i])
                 .setViewType(vk::ImageViewType::e2D)
                 .setComponents(mapping)
-                .setFormat(format)
+                .setFormat(swapchainFormat)
                 .setSubresourceRange(subresourceRange);
             swapchainImageViews[i] = device.createImageView(createInfo);
         }
+    }
+
+    void VulkanRHI::CreateFramebufferImageAndView()
+    {
+        vk::ImageCreateInfo depthImageCreateInfo;
+        depthImageCreateInfo.setImageType(vk::ImageType::e2D)
+            .setExtent({swapchainExtent.width, swapchainExtent.height, 1})
+            .setMipLevels(1)
+            .setArrayLayers(1)
+            .setFormat(depthImageFormat)
+            .setTiling(vk::ImageTiling::eOptimal)
+            .setInitialLayout(vk::ImageLayout::eUndefined)
+            .setUsage(vk::ImageUsageFlagBits::eInputAttachment |
+                      vk::ImageUsageFlagBits::eDepthStencilAttachment |
+                      vk::ImageUsageFlagBits::eTransferSrc)
+            .setSamples(vk::SampleCountFlagBits::e1)
+            .setSharingMode(vk::SharingMode::eExclusive);
+
+        depthImage = CreateImage(depthImageCreateInfo, vk::MemoryPropertyFlagBits::eDeviceLocal, depthImageMemory);
+
+        vk::ImageSubresourceRange range;
+        range.setAspectMask(vk::ImageAspectFlagBits::eDepth)
+            .setBaseMipLevel(0)
+            .setLevelCount(1)
+            .setBaseArrayLayer(0)
+            .setLayerCount(1);
+
+        vk::ImageViewCreateInfo depthImageViewCreateInfo;
+        depthImageViewCreateInfo.setImage(depthImage)
+            .setViewType(vk::ImageViewType::e2D)
+            .setFormat(depthImageFormat)
+            .setSubresourceRange(range);
+
+        depthImageView = device.createImageView(depthImageViewCreateInfo);
     }
 
     void VulkanRHI::CreateCommandPool()
@@ -396,6 +440,26 @@ namespace XrayEngine
         }
     }
 
+    vk::Format VulkanRHI::FindSupportedFormat(const std::vector<vk::Format> &candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features)
+    {
+        for (vk::Format format : candidates)
+        {
+            vk::FormatProperties properties;
+            properties = physicalDevice.getFormatProperties(format);
+
+            if (tiling == vk::ImageTiling::eLinear && (properties.linearTilingFeatures & features) == features)
+            {
+                return format;
+            }
+            else if (tiling == vk::ImageTiling::eOptimal && (properties.optimalTilingFeatures & features) == features)
+            {
+                return format;
+            }
+        }
+
+        throw std::runtime_error("failed to find supported format!");
+    }
+
     vk::RenderPass VulkanRHI::CreateRenderPass(const vk::RenderPassCreateInfo &createInfo)
     {
         // TODO:: Error check
@@ -456,7 +520,7 @@ namespace XrayEngine
         return buffer;
     }
 
-    vk::Image VulkanRHI::CreateImage(const vk::ImageCreateInfo &createInfo, vk::MemoryPropertyFlags propertyFlags, vk::DeviceMemory &deviceMemory, vk::ImageView &imageView)
+    vk::Image VulkanRHI::CreateImage(const vk::ImageCreateInfo &createInfo, vk::MemoryPropertyFlags propertyFlags, vk::DeviceMemory &deviceMemory)
     {
         vk::Image image = device.createImage(createInfo);
 
@@ -466,19 +530,6 @@ namespace XrayEngine
             .setMemoryTypeIndex(QueryMemoryIndex(requirements, propertyFlags));
         deviceMemory = device.allocateMemory(allocateInfo);
         device.bindImageMemory(image, deviceMemory, 0);
-
-        vk::ImageSubresourceRange range;
-        range.setAspectMask(vk::ImageAspectFlagBits::eColor)
-            .setBaseArrayLayer(0)
-            .setLayerCount(1)
-            .setLevelCount(1)
-            .setBaseMipLevel(0);
-        vk::ImageViewCreateInfo imageViewCreateInfo;
-        imageViewCreateInfo.setImage(image)
-            .setViewType(vk::ImageViewType::e2D)
-            .setFormat(createInfo.format)
-            .setSubresourceRange(range);
-        imageView = device.createImageView(imageViewCreateInfo);
 
         return image;
     }
@@ -532,10 +583,19 @@ namespace XrayEngine
     VulkanRHISwapchainDescription VulkanRHI::GetSwapchainInfo()
     {
         VulkanRHISwapchainDescription description;
-        description.extent = extent;
-        description.format = format;
+        description.extent = swapchainExtent;
+        description.format = swapchainFormat;
         description.viewport = viewport;
         description.scissor = scissor;
+        return description;
+    }
+
+    vulkanRHIDepthImageDescription VulkanRHI::GetDepthImageInfo()
+    {
+        vulkanRHIDepthImageDescription description;
+        description.format = depthImageFormat;
+        description.image = depthImage;
+        description.imageView = depthImageView;
         return description;
     }
 

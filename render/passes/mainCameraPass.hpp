@@ -15,7 +15,8 @@ namespace XrayEngine
         enum MainCameraPassAttachment : uint8_t
         {
             eMainCameraPassAttachmentSwapchainImage = 0,
-            eMainCameraPassAttachmentCount = 1,
+            eMainCameraPassAttachmentDepth = 1,
+            eMainCameraPassAttachmentCount = 2,
         };
 
         enum MainCameraSubpass : uint8_t

@@ -11,4 +11,11 @@ namespace XrayEngine
         vk::Viewport viewport;
         vk::Rect2D scissor;
     };
+
+    struct vulkanRHIDepthImageDescription
+    {
+        vk::Format format;
+        vk::Image image;
+        vk::ImageView imageView;
+    };
 }

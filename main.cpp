@@ -40,6 +40,8 @@ int main()
 
         inputSystem->ProcessInput();
         renderSystem->RenderTick();
+
+        inputSystem->ResetInputData();
     }
 
     renderSystem->Quit();

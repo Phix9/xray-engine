@@ -8,12 +8,12 @@ namespace XrayEngine
 
         glfwSetWindowUserPointer(window, this);
         glfwSetCursorPosCallback(window, MouseMovementCallback);
+    
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     }
 
     void InputSystem::ProcessInput()
     {
-        inputData.mouseMovementDelta = glm::vec2(0.0f);
-
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         {
             glfwSetWindowShouldClose(window, true);
@@ -56,6 +56,11 @@ namespace XrayEngine
         }
     }
 
+    void InputSystem::ResetInputData()
+    {
+        inputData.mouseMovementDelta = glm::vec2(0.0f);
+    }
+
     InputData InputSystem::GetInputData()
     {
         return inputData;
@@ -81,6 +86,6 @@ namespace XrayEngine
         glm::vec2 delta = mousePosition - inputSystem->lastMousePosition;
         inputSystem->lastMousePosition = mousePosition;
 
-        inputSystem->inputData.mouseMovementDelta = delta;
+        inputSystem->inputData.mouseMovementDelta += delta;
     }
 }

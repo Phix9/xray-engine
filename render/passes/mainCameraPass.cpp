@@ -58,6 +58,7 @@ namespace XrayEngine
 
         std::vector<vk::ClearValue> clearValues(eMainCameraPassAttachmentCount);
         clearValues[eMainCameraPassAttachmentSwapchainImage].setColor({0.0f, 0.0f, 0.0f, 0.0f});
+        clearValues[eMainCameraPassAttachmentDepth].setDepthStencil({1.0f, 0});
 
         vk::RenderPassBeginInfo beginInfo;
         beginInfo.setRenderPass(renderPass)
@@ -79,7 +80,8 @@ namespace XrayEngine
 
         vulkanRHI->CommandBindIndexBuffer(vulkanRHI->GetCurrentCommandBuffer(), renderResource->mesh.indexBuffer, 0, vk::IndexType::eUint16);
 
-        vulkanRHI->CommandDrawIndexed(vulkanRHI->GetCurrentCommandBuffer(), 36, 1, 0, 0, 0);
+        // Two cubes * 6 faces * 2 triangles * 3 indices = 72.
+        vulkanRHI->CommandDrawIndexed(vulkanRHI->GetCurrentCommandBuffer(), 72, 1, 0, 0, 0);
 
         vulkanRHI->CommandEndRenderPass(vulkanRHI->GetCurrentCommandBuffer());
     }
@@ -87,13 +89,23 @@ namespace XrayEngine
     void MainCameraPass::SetupRenderPass()
     {
         // Attachment Description
-        std::vector<vk::AttachmentDescription> attachmentDescription(eMainCameraPassAttachmentCount);
+        std::vector<vk::AttachmentDescription> attachmentDescriptions(eMainCameraPassAttachmentCount);
 
-        vk::AttachmentDescription &swapchainImageAttachmentDescription = attachmentDescription[eMainCameraPassAttachmentSwapchainImage];
+        vk::AttachmentDescription &swapchainImageAttachmentDescription = attachmentDescriptions[eMainCameraPassAttachmentSwapchainImage];
         swapchainImageAttachmentDescription.setFormat(vulkanRHI->GetSwapchainInfo().format)
             .setSamples(vk::SampleCountFlagBits::e1)
             .setInitialLayout(vk::ImageLayout::eUndefined)
             .setFinalLayout(vk::ImageLayout::ePresentSrcKHR)
+            .setLoadOp(vk::AttachmentLoadOp::eClear)
+            .setStoreOp(vk::AttachmentStoreOp::eStore)
+            .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
+            .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+
+        vk::AttachmentDescription &depthAttachmentDescription = attachmentDescriptions[eMainCameraPassAttachmentDepth];
+        depthAttachmentDescription.setFormat(vulkanRHI->GetDepthImageInfo().format)
+            .setSamples(vk::SampleCountFlagBits::e1)
+            .setInitialLayout(vk::ImageLayout::eUndefined)
+            .setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal)
             .setLoadOp(vk::AttachmentLoadOp::eClear)
             .setStoreOp(vk::AttachmentStoreOp::eStore)
             .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
@@ -105,10 +117,14 @@ namespace XrayEngine
         vk::AttachmentReference basePassColorAttachmentReference;
         basePassColorAttachmentReference.setAttachment(eMainCameraPassAttachmentSwapchainImage)
             .setLayout(vk::ImageLayout::eColorAttachmentOptimal);
+        vk::AttachmentReference basePassDepthAttachmentReference;
+        basePassDepthAttachmentReference.setAttachment(eMainCameraPassAttachmentDepth)
+            .setLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
         vk::SubpassDescription &basePass = subpasses[eMainCameraSubpassBasePass];
         basePass.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics)
-            .setColorAttachments(basePassColorAttachmentReference);
+            .setColorAttachments(basePassColorAttachmentReference)
+            .setPDepthStencilAttachment(&basePassDepthAttachmentReference);
 
         // Dependencies
         std::vector<vk::SubpassDependency> dependencies(1);
@@ -116,14 +132,14 @@ namespace XrayEngine
         vk::SubpassDependency &basePassDependency = dependencies[0];
         basePassDependency.setSrcSubpass(VK_SUBPASS_EXTERNAL)
             .setDstSubpass(eMainCameraSubpassBasePass)
-            .setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
-            .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
-            .setSrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite)
-            .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead);
+            .setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eLateFragmentTests)
+            .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eEarlyFragmentTests)
+            .setSrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentWrite)
+            .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
 
         // RenderPass
         vk::RenderPassCreateInfo createInfo;
-        createInfo.setAttachments(attachmentDescription)
+        createInfo.setAttachments(attachmentDescriptions)
             .setSubpasses(subpasses)
             .setDependencies(dependencies);
 
@@ -197,8 +213,8 @@ namespace XrayEngine
 
         // 8. depth and stencil test
         vk::PipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo;
-        depthStencilStateCreateInfo.setDepthTestEnable(false)
-            .setDepthWriteEnable(false)
+        depthStencilStateCreateInfo.setDepthTestEnable(true)
+            .setDepthWriteEnable(true)
             .setDepthCompareOp(vk::CompareOp::eLess)
             .setDepthBoundsTestEnable(false)
             .setStencilTestEnable(false);
@@ -235,8 +251,11 @@ namespace XrayEngine
 
         for (int i = 0; i < swapchainFramebuffers.size(); i++)
         {
+            std::vector<vk::ImageView> frameBufferAttachments{vulkanRHI->GetSwapchainImageViews()[i],
+                                                              vulkanRHI->GetDepthImageInfo().imageView};
+
             vk::FramebufferCreateInfo createInfo;
-            createInfo.setAttachments(vulkanRHI->GetSwapchainImageViews()[i])
+            createInfo.setAttachments(frameBufferAttachments)
                 .setWidth(vulkanRHI->GetSwapchainInfo().extent.width)
                 .setHeight(vulkanRHI->GetSwapchainInfo().extent.height)
                 .setRenderPass(renderPass)

@@ -1,7 +1,5 @@
 #include <render/renderCamera.hpp>
 
-#include <iostream>
-
 namespace XrayEngine
 {
     void RenderCamera::Initialize(RenderCameraInitInfo initInfo)
@@ -21,11 +19,10 @@ namespace XrayEngine
 
         const glm::vec3 forward = rotation * RenderCamera::Y;
         const glm::vec3 right = rotation * RenderCamera::X;
-        const glm::vec3 up = rotation * upAxis;
 
         const glm::vec3 worldMoveDirection = forward * inputDirection.x +
                                              right * inputDirection.y +
-                                             up * inputDirection.z;
+                                             upAxis * inputDirection.z;
 
         position += worldMoveDirection * moveSpeed;
     }
@@ -33,10 +30,6 @@ namespace XrayEngine
     void RenderCamera::Rotate()
     {
         const glm::vec2 mouseMovementDelta = inputSystem->GetInputData().mouseMovementDelta;
-        if (mouseMovementDelta == glm::vec2{0.0f})
-        {
-            return;
-        }
 
         yaw -= mouseMovementDelta.x * rotateSpeed;
         pitch -= mouseMovementDelta.y * rotateSpeed;
@@ -80,7 +73,7 @@ namespace XrayEngine
 
         glm::mat4 project{0.0f};
         project[0][0] = 1.0f / (aspect * t);
-        project[1][1] = -1.0 / t;
+        project[1][1] = -1.0f / t;
         project[2][2] = zFar / (zNear - zFar);
         project[3][2] = -(zFar * zNear) / (zFar - zNear);
         project[2][3] = -1.0f;

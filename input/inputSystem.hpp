@@ -21,6 +21,7 @@ namespace XrayEngine
     public:
         void Initialize(InputSystemInitInfo initInfo);
         void ProcessInput();
+        void ResetInputData();
         InputData GetInputData();
 
     private:
