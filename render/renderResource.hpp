@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.hpp>
 #include <stb_image.h>
+#include <tiny_obj_loader.h>
 #include <glm/glm.hpp>
 
 #include "render/interface/vulkanRHI.hpp"
@@ -15,6 +16,12 @@ namespace XrayEngine
         std::shared_ptr<VulkanRHI> vulkanRHI;
     };
 
+    struct MeshData
+    {
+        std::vector<MeshVertex> vertices;
+        std::vector<uint16_t> indices;
+    };
+
     struct TextureData
     {
         uint32_t width;
@@ -24,6 +31,8 @@ namespace XrayEngine
 
     struct Mesh
     {
+        uint32_t vertexCount;
+
         vk::Buffer vertexBuffer;
         vk::DeviceMemory vertexBufferMemory;
 
@@ -77,6 +86,7 @@ namespace XrayEngine
 
         void Initialize(RenderResourceInitInfo initInfo);
         void Quit();
+        MeshData LoadMesh(std::string filePath);
         TextureData LoadTexture(std::string filePath);
         void CreateMeshes(const std::vector<MeshVertex> &meshData);
         void CreateIndices(const std::vector<uint16_t> &indices);

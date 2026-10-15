@@ -80,8 +80,7 @@ namespace XrayEngine
 
         vulkanRHI->CommandBindIndexBuffer(vulkanRHI->GetCurrentCommandBuffer(), renderResource->mesh.indexBuffer, 0, vk::IndexType::eUint16);
 
-        // Two cubes * 6 faces * 2 triangles * 3 indices = 72.
-        vulkanRHI->CommandDrawIndexed(vulkanRHI->GetCurrentCommandBuffer(), 72, 1, 0, 0, 0);
+        vulkanRHI->CommandDrawIndexed(vulkanRHI->GetCurrentCommandBuffer(), renderResource->mesh.vertexCount, 1, 0, 0, 0);
 
         vulkanRHI->CommandEndRenderPass(vulkanRHI->GetCurrentCommandBuffer());
     }

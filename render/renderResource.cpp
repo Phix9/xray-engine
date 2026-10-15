@@ -1,9 +1,7 @@
 #define STB_IMAGE_IMPLEMENTATION
+#define TINYOBJLOADER_IMPLEMENTATION
 
 #include "render/renderResource.hpp"
-
-#include <algorithm>
-#include <cstring>
 
 namespace XrayEngine
 {
@@ -62,6 +60,43 @@ namespace XrayEngine
         textures.clear();
     }
 
+    MeshData RenderResource::LoadMesh(std::string filePath)
+    {
+        tinyobj::attrib_t attrib;
+        std::vector<tinyobj::shape_t> shapes;
+        std::vector<tinyobj::material_t> materials;
+        std::string warn, err;
+
+        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filePath.c_str()))
+        {
+            throw std::runtime_error(warn + err);
+        }
+
+        MeshData meshData;
+
+        for (const auto &shape : shapes)
+        {
+            for (const auto &index : shape.mesh.indices)
+            {
+                MeshVertex vertex;
+
+                vertex.position = {
+                    attrib.vertices[3 * index.vertex_index + 0],
+                    attrib.vertices[3 * index.vertex_index + 1],
+                    attrib.vertices[3 * index.vertex_index + 2]};
+
+                vertex.texCoord = {
+                    attrib.texcoords[2 * index.texcoord_index + 0],
+                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1]};
+
+                meshData.vertices.push_back(vertex);
+                meshData.indices.push_back(static_cast<uint16_t>(meshData.vertices.size() - 1));
+            }
+        }
+
+        return meshData;
+    }
+
     TextureData RenderResource::LoadTexture(std::string filePath)
     {
         int width, height, nrChannel;
@@ -80,9 +115,10 @@ namespace XrayEngine
         return textureData;
     }
 
-    void RenderResource::CreateMeshes(const std::vector<MeshVertex> &meshData)
+    void RenderResource::CreateMeshes(const std::vector<MeshVertex> &vertices)
     {
-        vk::DeviceSize meshSize = meshData.size() * sizeof(MeshVertex);
+        mesh.vertexCount = static_cast<uint32_t>(vertices.size());
+        vk::DeviceSize meshSize = vertices.size() * sizeof(MeshVertex);
         vk::Buffer stagingBuffer;
         vk::DeviceMemory stagingBufferMemory;
 
@@ -98,7 +134,7 @@ namespace XrayEngine
         mesh.vertexBuffer = vulkanRHI->CreateBuffer(createInfo, vk::MemoryPropertyFlagBits::eDeviceLocal, mesh.vertexBufferMemory);
 
         void *ptr = vulkanRHI->MapMemory(stagingBufferMemory, 0, meshSize);
-        memcpy(ptr, meshData.data(), meshSize);
+        memcpy(ptr, vertices.data(), meshSize);
         vulkanRHI->UnmapMemory(stagingBufferMemory);
 
         vk::CommandBuffer commandBuffer = vulkanRHI->BeginOneTimeCommandBuffer();

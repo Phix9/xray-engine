@@ -41,7 +41,7 @@ namespace XrayEngine
         {
             moveDirection += glm::vec3(0.0f, 0.0f, 1.0f);
         }
-        if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
         {
             moveDirection += glm::vec3(0.0f, 0.0f, -1.0f);
         }

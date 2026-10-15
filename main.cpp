@@ -61,7 +61,6 @@ void InitializeWindow(GLFWwindow*& window, const WindowCreateInfo& createInfo)
 
     if (window == NULL)
     {
-        std::cout << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
         return;
     }
