@@ -33,7 +33,7 @@ namespace XrayEngine
         glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
         glm::vec3 upAxis{Z};
 
-        float zNear{0.1f};
+        float zNear{0.01f};
         float zFar{1000.0f};
 
         float fov{90.0f};

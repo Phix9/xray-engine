@@ -1,12 +1,15 @@
 #pragma once
 
+#include <unordered_map>
 #include <vulkan/vulkan.hpp>
 #include <stb_image.h>
 #include <tiny_obj_loader.h>
 #include <glm/glm.hpp>
 
 #include "render/interface/vulkanRHI.hpp"
-#include "render/renderMesh.hpp"
+#include "render/mesh.hpp"
+#include "render/material.hpp"
+#include "render/renderScene.hpp"
 #include "render/renderCamera.hpp"
 
 namespace XrayEngine
@@ -19,19 +22,30 @@ namespace XrayEngine
     struct MeshData
     {
         std::vector<MeshVertex> vertices;
-        std::vector<uint16_t> indices;
+        std::vector<uint32_t> indices;
     };
 
     struct TextureData
     {
-        uint32_t width;
-        uint32_t height;
-        void* pixels;
+        uint32_t width{0};
+        uint32_t height{0};
+        void* pixels{nullptr};
+        vk::Format format{vk::Format::eUndefined};
     };
 
+    struct RenderMaterialData
+    {
+        TextureData baseColor;
+        TextureData metallic;
+        TextureData roughness;
+        TextureData normal;
+        TextureData occlusion;
+    };
+    
     struct Mesh
     {
-        uint32_t vertexCount;
+        uint32_t vertexCount{0};
+        uint32_t indexCount{0};
 
         vk::Buffer vertexBuffer;
         vk::DeviceMemory vertexBufferMemory;
@@ -45,6 +59,15 @@ namespace XrayEngine
         vk::Image image;
         vk::ImageView imageView;
         vk::DeviceMemory memory;
+    };
+
+    struct RenderMaterial
+    {
+        Texture baseColor;
+        Texture metallic;
+        Texture roughness;
+        Texture normal;
+        Texture occlusion;
     };
 
     struct Storage
@@ -63,11 +86,35 @@ namespace XrayEngine
         void* mappedMemory;
     };
 
+    struct DirectionalLightObject
+    {
+        glm::vec3 direcion;
+        float direction_padding;
+        glm::vec3 color;
+        float color_padding;
+    };
+
+    struct PointLightObject
+    {
+        glm::vec3 position;
+        float radius;
+        glm::vec3 intensity;
+        float intensity_padding;
+    };
+
     struct MeshPerFrameStorageBufferObject
     {
         glm::mat4 projectViewMatrix;
         glm::vec3 cameraPosition;
-        float cameraPositionPadding{0.0f};
+        float cameraPosition_padding{0.0f};
+        glm::vec3 ambientLight;
+        float ambientLight_padding{0.0f};
+        uint32_t pointLightCount;
+        uint32_t pointLightCount_padding1;
+        uint32_t pointLightCount_padding2;
+        uint32_t pointLightCount_padding3;
+        PointLightObject pointLights[16];
+        DirectionalLightObject directionalLight;
     };
 
     class RenderResource
@@ -79,7 +126,7 @@ namespace XrayEngine
         std::vector<Texture> textures;
 
         Mesh mesh;
-        Texture texture;
+        RenderMaterial material;
         Storage storage;
 
         MeshPerFrameStorageBufferObject meshPerFrameStorageBufferObject;
@@ -87,13 +134,15 @@ namespace XrayEngine
         void Initialize(RenderResourceInitInfo initInfo);
         void Quit();
         MeshData LoadMesh(std::string filePath);
-        TextureData LoadTexture(std::string filePath);
+        TextureData LoadTexture(std::string filePath, bool isSRGB);
+        RenderMaterialData LoadMaterial(Material material);
         void CreateMeshes(const std::vector<MeshVertex> &meshData);
-        void CreateIndices(const std::vector<uint16_t> &indices);
-        void CreateTextures(const TextureData &textureData);
+        void CreateIndices(const std::vector<uint32_t> &indices);
+        void CreateMaterial(const RenderMaterialData &materialData);
+        void CreateTextures(const TextureData &textureData, Texture &targetTexture);
         void CreateStorageBuffer();
         void ResetRingBufferOffset();
-        void UpdatePerFrameBuffer(std::shared_ptr<RenderCamera> camera);
+        void UpdatePerFrameBuffer(std::shared_ptr<RenderScene> renderScene, std::shared_ptr<RenderCamera> camera);
         void TransitionImageLayout(vk::Image image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
     };
 }

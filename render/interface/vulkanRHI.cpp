@@ -286,7 +286,7 @@ namespace XrayEngine
         poolSizes[1].setType(vk::DescriptorType::eStorageBufferDynamic)
             .setDescriptorCount(1);
         poolSizes[2].setType(vk::DescriptorType::eCombinedImageSampler)
-            .setDescriptorCount(1);
+            .setDescriptorCount(5);
 
         vk::DescriptorPoolCreateInfo createInfo;
         createInfo.setPoolSizes(poolSizes)

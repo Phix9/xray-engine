@@ -6,6 +6,7 @@
 #include "input/inputSystem.hpp"
 #include "render/interface/vulkanRHI.hpp"
 #include "render/renderResource.hpp"
+#include "render/renderScene.hpp"
 #include "render/renderCamera.hpp"
 #include "render/renderPass.hpp"
 #include "render/passes/mainCameraPass.hpp"
@@ -35,6 +36,7 @@ namespace XrayEngine
         std::shared_ptr<InputSystem> inputSystem;
 
         std::shared_ptr<VulkanRHI> vulkanRHI;
+        std::shared_ptr<RenderScene> renderScene;
         std::shared_ptr<RenderCamera> renderCamera;
         std::shared_ptr<RenderResource> renderResource;
         std::shared_ptr<MainCameraPass> mainCameraPass;

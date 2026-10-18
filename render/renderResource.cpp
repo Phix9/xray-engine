@@ -1,6 +1,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define TINYOBJLOADER_IMPLEMENTATION
 
+#include <cmath>
+
 #include "render/renderResource.hpp"
 
 namespace XrayEngine
@@ -22,13 +24,6 @@ namespace XrayEngine
         {
             vulkanRHI->DestroyBuffer(mesh.indexBuffer);
             vulkanRHI->FreeMemory(mesh.indexBufferMemory);
-        }
-
-        if (texture.imageView)
-        {
-            vulkanRHI->DestroyImageView(texture.imageView);
-            vulkanRHI->DestroyImage(texture.image);
-            vulkanRHI->FreeMemory(texture.memory);
         }
 
         if (storage.ringBuffer)
@@ -74,30 +69,97 @@ namespace XrayEngine
 
         MeshData meshData;
 
+        std::unordered_map<MeshVertex, uint32_t> uniqueVertices{};
+
         for (const auto &shape : shapes)
         {
             for (const auto &index : shape.mesh.indices)
             {
-                MeshVertex vertex;
+                MeshVertex vertex{};
 
                 vertex.position = {
                     attrib.vertices[3 * index.vertex_index + 0],
                     attrib.vertices[3 * index.vertex_index + 1],
                     attrib.vertices[3 * index.vertex_index + 2]};
 
+                vertex.normal = {
+                    attrib.normals[3 * index.normal_index + 0],
+                    attrib.normals[3 * index.normal_index + 1],
+                    attrib.normals[3 * index.normal_index + 2]};
+
                 vertex.texCoord = {
                     attrib.texcoords[2 * index.texcoord_index + 0],
                     1.0f - attrib.texcoords[2 * index.texcoord_index + 1]};
 
-                meshData.vertices.push_back(vertex);
-                meshData.indices.push_back(static_cast<uint16_t>(meshData.vertices.size() - 1));
+                if (uniqueVertices.count(vertex) == 0) 
+                {
+                    uniqueVertices[vertex] = static_cast<uint32_t>(meshData.vertices.size());
+                    meshData.vertices.push_back(vertex);
+                }
+
+                meshData.indices.push_back(uniqueVertices[vertex]);
             }
+        }
+
+        std::vector<glm::vec3> tangentAccumulators(meshData.vertices.size(), glm::vec3(0.0f));
+
+        for (size_t i = 0; i + 2 < meshData.indices.size(); i += 3)
+        {
+            const uint32_t i0 = meshData.indices[i + 0];
+            const uint32_t i1 = meshData.indices[i + 1];
+            const uint32_t i2 = meshData.indices[i + 2];
+
+            const MeshVertex &v0 = meshData.vertices[i0];
+            const MeshVertex &v1 = meshData.vertices[i1];
+            const MeshVertex &v2 = meshData.vertices[i2];
+
+            const glm::vec3 edge1 = v1.position - v0.position;
+            const glm::vec3 edge2 = v2.position - v0.position;
+            const glm::vec2 deltaUV1 = v1.texCoord - v0.texCoord;
+            const glm::vec2 deltaUV2 = v2.texCoord - v0.texCoord;
+
+            const float determinant = deltaUV1.x * deltaUV2.y - deltaUV1.y * deltaUV2.x;
+            if (std::abs(determinant) < 1e-8f)
+            {
+                continue;
+            }
+
+            const float r = 1.0f / determinant;
+            const glm::vec3 tangent = (edge1 * deltaUV2.y - edge2 * deltaUV1.y) * r;
+
+            tangentAccumulators[i0] += tangent;
+            tangentAccumulators[i1] += tangent;
+            tangentAccumulators[i2] += tangent;
+        }
+
+        for (size_t i = 0; i < meshData.vertices.size(); ++i)
+        {
+            glm::vec3 tangent = tangentAccumulators[i];
+            const glm::vec3 &normal = meshData.vertices[i].normal;
+
+            if (glm::dot(tangent, tangent) > 1e-12f)
+            {
+                tangent -= normal * glm::dot(normal, tangent);
+            }
+
+            const float length = glm::length(tangent);
+            if (length > 1e-6f)
+            {
+                tangent /= length;
+            }
+            else
+            {
+                const glm::vec3 fallback = std::abs(normal.x) < 0.9f ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+                tangent = glm::normalize(fallback - normal * glm::dot(normal, fallback));
+            }
+
+            meshData.vertices[i].tangent = tangent;
         }
 
         return meshData;
     }
 
-    TextureData RenderResource::LoadTexture(std::string filePath)
+    TextureData RenderResource::LoadTexture(std::string filePath, bool isSRGB)
     {
         int width, height, nrChannel;
         stbi_uc* pixels = stbi_load(filePath.data(), &width, &height, &nrChannel, STBI_rgb_alpha);
@@ -111,8 +173,39 @@ namespace XrayEngine
         textureData.width = width;
         textureData.height = height;
         textureData.pixels = pixels;
+        textureData.format = isSRGB? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm;
 
         return textureData;
+    }
+
+    RenderMaterialData RenderResource::LoadMaterial(Material material)
+    {
+        RenderMaterialData materialData;
+        if (!material.baseColorTexture.empty())
+        {
+            materialData.baseColor = LoadTexture(material.baseColorTexture, true);
+        }
+
+        if (!material.metallicTexture.empty())
+        {
+            materialData.metallic = LoadTexture(material.metallicTexture, false);
+        }
+
+        if (!material.roughnessTexture.empty())
+        {
+            materialData.roughness = LoadTexture(material.roughnessTexture, false);
+        }
+
+        if (!material.normalTexture.empty())
+        {
+            materialData.normal = LoadTexture(material.normalTexture, false);
+        }
+
+        if (!material.occlusionTexture.empty())
+        {
+            materialData.occlusion = LoadTexture(material.occlusionTexture, false);
+        }
+        return materialData;
     }
 
     void RenderResource::CreateMeshes(const std::vector<MeshVertex> &vertices)
@@ -152,9 +245,11 @@ namespace XrayEngine
         vulkanRHI->FreeMemory(stagingBufferMemory);
     }
 
-    void RenderResource::CreateIndices(const std::vector<uint16_t> &indices)
+    void RenderResource::CreateIndices(const std::vector<uint32_t> &indices)
     {
-        vk::DeviceSize indexSize = indices.size() * sizeof(uint16_t);
+        mesh.indexCount = static_cast<uint32_t>(indices.size());
+
+        vk::DeviceSize indexSize = indices.size() * sizeof(uint32_t);
 
         vk::BufferCreateInfo createInfo;
         createInfo.setSize(indexSize)
@@ -167,7 +262,54 @@ namespace XrayEngine
         vulkanRHI->UnmapMemory(mesh.indexBufferMemory);
     }
 
-    void RenderResource::CreateTextures(const TextureData &textureData)
+    void RenderResource::CreateMaterial(const RenderMaterialData &materialData)
+    {
+        float emptyPixel[4] = {0.5f, 0.5f, 0.5f, 0.5f};
+
+        TextureData baseColor;
+        baseColor.width = 1;
+        baseColor.height = 1;
+        baseColor.pixels = emptyPixel;
+        baseColor.format = vk::Format::eR8G8B8A8Srgb;
+
+        TextureData metallic;
+        metallic.width = 1;
+        metallic.height = 1;
+        metallic.pixels = emptyPixel;
+        metallic.format = vk::Format::eR8G8B8A8Unorm;
+
+        TextureData roughness;
+        roughness.width = 1;
+        roughness.height = 1;
+        roughness.pixels = emptyPixel;
+        roughness.format = vk::Format::eR8G8B8A8Unorm;
+
+        TextureData normal;
+        normal.width = 1;
+        normal.height = 1;
+        normal.pixels = emptyPixel;
+        normal.format = vk::Format::eR8G8B8A8Unorm;
+
+        TextureData occlusion;
+        occlusion.width = 1;
+        occlusion.height = 1;
+        occlusion.pixels = emptyPixel;
+        occlusion.format = vk::Format::eR8G8B8A8Unorm;
+
+        const TextureData baseColorData = materialData.baseColor.pixels ? materialData.baseColor : baseColor;
+        const TextureData metallicData = materialData.metallic.pixels ? materialData.metallic : metallic;
+        const TextureData roughnessData = materialData.roughness.pixels ? materialData.roughness : roughness;
+        const TextureData normalData = materialData.normal.pixels ? materialData.normal : normal;
+        const TextureData occlusionData = materialData.occlusion.pixels ? materialData.occlusion : occlusion;
+
+        CreateTextures(baseColorData, material.baseColor);
+        CreateTextures(metallicData, material.metallic);
+        CreateTextures(roughnessData, material.roughness);
+        CreateTextures(normalData, material.normal);
+        CreateTextures(occlusionData, material.occlusion);
+    }
+
+    void RenderResource::CreateTextures(const TextureData &textureData, Texture &targetTexture)
     {
         vk::DeviceSize textureSize = textureData.width * textureData.height * 4;
 
@@ -189,13 +331,13 @@ namespace XrayEngine
             .setArrayLayers(1)
             .setMipLevels(1)
             .setExtent({textureData.width, textureData.height, 1})
-            .setFormat(vk::Format::eR8G8B8A8Srgb)
+            .setFormat(textureData.format)
             .setTiling(vk::ImageTiling::eOptimal)
             .setInitialLayout(vk::ImageLayout::eUndefined)
             .setUsage(vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled)
             .setSamples(vk::SampleCountFlagBits::e1);
 
-        texture.image = vulkanRHI->CreateImage(createInfo, vk::MemoryPropertyFlagBits::eDeviceLocal, texture.memory);
+        targetTexture.image = vulkanRHI->CreateImage(createInfo, vk::MemoryPropertyFlagBits::eDeviceLocal, targetTexture.memory);
         
         vk::ImageSubresourceRange range;
         range.setAspectMask(vk::ImageAspectFlagBits::eColor)
@@ -204,14 +346,14 @@ namespace XrayEngine
             .setLevelCount(1)
             .setBaseMipLevel(0);
         vk::ImageViewCreateInfo imageViewCreateInfo;
-        imageViewCreateInfo.setImage(texture.image)
+        imageViewCreateInfo.setImage(targetTexture.image)
             .setViewType(vk::ImageViewType::e2D)
             .setFormat(createInfo.format)
             .setSubresourceRange(range);
         
-        texture.imageView = vulkanRHI->CreateImageView(imageViewCreateInfo);
+        targetTexture.imageView = vulkanRHI->CreateImageView(imageViewCreateInfo);
 
-        TransitionImageLayout(texture.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+        TransitionImageLayout(targetTexture.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
 
         vk::CommandBuffer commandBuffer = vulkanRHI->BeginOneTimeCommandBuffer();
 
@@ -228,11 +370,11 @@ namespace XrayEngine
             .setImageExtent({textureData.width, textureData.height, 1})
             .setImageSubresource(layers);
 
-        vulkanRHI->CommandCopyBufferToImage(commandBuffer, stagingBuffer, texture.image, vk::ImageLayout::eTransferDstOptimal ,region);
+        vulkanRHI->CommandCopyBufferToImage(commandBuffer, stagingBuffer, targetTexture.image, vk::ImageLayout::eTransferDstOptimal ,region);
 
         vulkanRHI->EndOneTimeCommandBuffer(commandBuffer);
         
-        TransitionImageLayout(texture.image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+        TransitionImageLayout(targetTexture.image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
     
         vulkanRHI->DestroyBuffer(stagingBuffer);
         vulkanRHI->FreeMemory(stagingBufferMemory);
@@ -275,14 +417,31 @@ namespace XrayEngine
         storage.ringBufferEnds[vulkanRHI->GetCurrentFrameIndex()] = storage.ringBufferBegins[vulkanRHI->GetCurrentFrameIndex()];
     }
 
-    void RenderResource::UpdatePerFrameBuffer(std::shared_ptr<RenderCamera> camera)
+    void RenderResource::UpdatePerFrameBuffer(std::shared_ptr<RenderScene> renderScene, std::shared_ptr<RenderCamera> camera)
     {
         glm::mat4 viewMatrix = camera->GetViewMatrix();
         glm::mat4 projectMatrix = camera->GetProjectMatrix();
         glm::vec3 cameraPosition = camera->GetPosition();
+        glm::vec3 ambientLight = renderScene->ambientLight.irradiance;
+        uint32_t pointLightCount = static_cast<uint32_t>(renderScene->pointLightList.lights.size());
+        
+        for(uint32_t i = 0; i< pointLightCount; i++)
+        {
+            glm::vec3 pointLightPositon = renderScene->pointLightList.lights[i].position;
+            glm::vec3 pointLightIntensity = renderScene->pointLightList.lights[i].intensity;
+            float pointLightRadius = renderScene->pointLightList.lights[i].calculateRadius();
+
+            meshPerFrameStorageBufferObject.pointLights[i].position = pointLightPositon;
+            meshPerFrameStorageBufferObject.pointLights[i].radius = pointLightRadius;
+            meshPerFrameStorageBufferObject.pointLights[i].intensity = pointLightIntensity;
+        }
 
         meshPerFrameStorageBufferObject.projectViewMatrix = projectMatrix * viewMatrix;
         meshPerFrameStorageBufferObject.cameraPosition = cameraPosition;
+        meshPerFrameStorageBufferObject.ambientLight = ambientLight;
+        meshPerFrameStorageBufferObject.pointLightCount = pointLightCount;
+        meshPerFrameStorageBufferObject.directionalLight.direcion = renderScene->directionLight.direction;
+        meshPerFrameStorageBufferObject.directionalLight.color = renderScene->directionLight.color;
     }
 
     void RenderResource::TransitionImageLayout(vk::Image image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout)

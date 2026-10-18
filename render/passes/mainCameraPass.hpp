@@ -2,7 +2,6 @@
 
 #include "render/renderHelper.hpp"
 #include "render/renderPass.hpp"
-#include "render/renderMesh.hpp"
 
 namespace XrayEngine
 {
@@ -34,7 +33,7 @@ namespace XrayEngine
         enum DescriptorSetLayoutType : uint8_t
         {
             eDescriptorSetLayoutPerFrame = 0,
-            eDescriptorSetLayoutPerMesh = 1,
+            eDescriptorSetLayoutMeshPerMaterial = 1,
             eDescriptorSetLayoutCount = 2,
         };
 

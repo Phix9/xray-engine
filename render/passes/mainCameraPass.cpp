@@ -78,9 +78,9 @@ namespace XrayEngine
 
         vulkanRHI->CommandBindVertexBuffers(vulkanRHI->GetCurrentCommandBuffer(), 0, {renderResource->mesh.vertexBuffer}, {0});
 
-        vulkanRHI->CommandBindIndexBuffer(vulkanRHI->GetCurrentCommandBuffer(), renderResource->mesh.indexBuffer, 0, vk::IndexType::eUint16);
+        vulkanRHI->CommandBindIndexBuffer(vulkanRHI->GetCurrentCommandBuffer(), renderResource->mesh.indexBuffer, 0, vk::IndexType::eUint32);
 
-        vulkanRHI->CommandDrawIndexed(vulkanRHI->GetCurrentCommandBuffer(), renderResource->mesh.vertexCount, 1, 0, 0, 0);
+        vulkanRHI->CommandDrawIndexed(vulkanRHI->GetCurrentCommandBuffer(), renderResource->mesh.indexCount, 1, 0, 0, 0);
 
         vulkanRHI->CommandEndRenderPass(vulkanRHI->GetCurrentCommandBuffer());
     }
@@ -284,18 +284,37 @@ namespace XrayEngine
         }
 
         {
-            std::vector<vk::DescriptorSetLayoutBinding> perMeshBindings;
-            perMeshBindings.resize(1);
+            std::vector<vk::DescriptorSetLayoutBinding> meshPerMaterialBindings;
+            meshPerMaterialBindings.resize(5);
 
-            perMeshBindings[0].setBinding(0)
+            meshPerMaterialBindings[0].setBinding(0)
                 .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
                 .setDescriptorCount(1)
                 .setStageFlags(vk::ShaderStageFlagBits::eFragment);
 
+            meshPerMaterialBindings[1].setBinding(1)
+                .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                .setDescriptorCount(1)
+                .setStageFlags(vk::ShaderStageFlagBits::eFragment);
+            
+            meshPerMaterialBindings[2].setBinding(2)
+                .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                .setDescriptorCount(1)
+                .setStageFlags(vk::ShaderStageFlagBits::eFragment);
+            
+            meshPerMaterialBindings[3].setBinding(3)
+                .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                .setDescriptorCount(1)
+                .setStageFlags(vk::ShaderStageFlagBits::eFragment);
+            
+            meshPerMaterialBindings[4].setBinding(4)
+                .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                .setDescriptorCount(1)
+                .setStageFlags(vk::ShaderStageFlagBits::eFragment);
             vk::DescriptorSetLayoutCreateInfo createInfo;
-            createInfo.setBindings(perMeshBindings);
+            createInfo.setBindings(meshPerMaterialBindings);
 
-            descriptorSetLayouts[eDescriptorSetLayoutPerMesh] = vulkanRHI->CreateDescriptorSetLayout(createInfo);
+            descriptorSetLayouts[eDescriptorSetLayoutMeshPerMaterial] = vulkanRHI->CreateDescriptorSetLayout(createInfo);
         }
     }
 
@@ -329,27 +348,63 @@ namespace XrayEngine
         }
 
         {
-            sampler = vulkanRHI->CreateDefaultLinearSampler();
-
             vk::DescriptorSetAllocateInfo allocateInfo;
             allocateInfo.setDescriptorPool(vulkanRHI->GetDescriptorPool())
                 .setDescriptorSetCount(1)
-                .setSetLayouts(descriptorSetLayouts[eDescriptorSetLayoutPerMesh]);
+                .setSetLayouts(descriptorSetLayouts[eDescriptorSetLayoutMeshPerMaterial]);
 
-            descriptorSets[eDescriptorSetLayoutPerMesh] = vulkanRHI->AllocateDescriptorSets(allocateInfo);
+            descriptorSets[eDescriptorSetLayoutMeshPerMaterial] = vulkanRHI->AllocateDescriptorSets(allocateInfo);
 
-            vk::DescriptorImageInfo imageInfo;
-            imageInfo.setSampler(sampler)
-                .setImageView(renderResource->texture.imageView)
+            sampler = vulkanRHI->CreateDefaultLinearSampler();
+
+            vk::DescriptorImageInfo baseColorImageInfo;
+            baseColorImageInfo.setSampler(sampler)
+                .setImageView(renderResource->material.baseColor.imageView)
+                .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+            vk::DescriptorImageInfo metallicImageInfo;
+            metallicImageInfo.setSampler(sampler)
+                .setImageView(renderResource->material.metallic.imageView)
+                .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+            vk::DescriptorImageInfo roughnessImageInfo;
+            roughnessImageInfo.setSampler(sampler)
+                .setImageView(renderResource->material.roughness.imageView)
+                .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+            vk::DescriptorImageInfo normalImageInfo;
+            normalImageInfo.setSampler(sampler)
+                .setImageView(renderResource->material.normal.imageView)
+                .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+            vk::DescriptorImageInfo occlusionImageInfo;
+            occlusionImageInfo.setSampler(sampler)
+                .setImageView(renderResource->material.occlusion.imageView)
                 .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
 
             std::vector<vk::WriteDescriptorSet> writes;
-            writes.resize(1);
+            writes.resize(5);
 
             writes[0].setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-                .setImageInfo(imageInfo)
-                .setDstSet(descriptorSets[eDescriptorSetLayoutPerMesh])
+                .setImageInfo(baseColorImageInfo)
+                .setDstSet(descriptorSets[eDescriptorSetLayoutMeshPerMaterial])
                 .setDstBinding(0)
+                .setDescriptorCount(1);
+            writes[1].setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                .setImageInfo(metallicImageInfo)
+                .setDstSet(descriptorSets[eDescriptorSetLayoutMeshPerMaterial])
+                .setDstBinding(1)
+                .setDescriptorCount(1);
+            writes[2].setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                .setImageInfo(roughnessImageInfo)
+                .setDstSet(descriptorSets[eDescriptorSetLayoutMeshPerMaterial])
+                .setDstBinding(2)
+                .setDescriptorCount(1);
+            writes[3].setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                .setImageInfo(normalImageInfo)
+                .setDstSet(descriptorSets[eDescriptorSetLayoutMeshPerMaterial])
+                .setDstBinding(3)
+                .setDescriptorCount(1);
+            writes[4].setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                .setImageInfo(occlusionImageInfo)
+                .setDstSet(descriptorSets[eDescriptorSetLayoutMeshPerMaterial])
+                .setDstBinding(4)
                 .setDescriptorCount(1);
 
             vulkanRHI->UpdateDescriptorSets(writes, {});
