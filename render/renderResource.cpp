@@ -201,9 +201,9 @@ namespace XrayEngine
             materialData.normal = LoadTexture(material.normalTexture, false);
         }
 
-        if (!material.occlusionTexture.empty())
+        if (!material.AOTexture.empty())
         {
-            materialData.occlusion = LoadTexture(material.occlusionTexture, false);
+            materialData.AO = LoadTexture(material.AOTexture, false);
         }
         return materialData;
     }
@@ -290,23 +290,23 @@ namespace XrayEngine
         normal.pixels = emptyPixel;
         normal.format = vk::Format::eR8G8B8A8Unorm;
 
-        TextureData occlusion;
-        occlusion.width = 1;
-        occlusion.height = 1;
-        occlusion.pixels = emptyPixel;
-        occlusion.format = vk::Format::eR8G8B8A8Unorm;
+        TextureData AO;
+        AO.width = 1;
+        AO.height = 1;
+        AO.pixels = emptyPixel;
+        AO.format = vk::Format::eR8G8B8A8Unorm;
 
         const TextureData baseColorData = materialData.baseColor.pixels ? materialData.baseColor : baseColor;
         const TextureData metallicData = materialData.metallic.pixels ? materialData.metallic : metallic;
         const TextureData roughnessData = materialData.roughness.pixels ? materialData.roughness : roughness;
         const TextureData normalData = materialData.normal.pixels ? materialData.normal : normal;
-        const TextureData occlusionData = materialData.occlusion.pixels ? materialData.occlusion : occlusion;
+        const TextureData AOData = materialData.AO.pixels ? materialData.AO : AO;
 
         CreateTextures(baseColorData, material.baseColor);
         CreateTextures(metallicData, material.metallic);
         CreateTextures(roughnessData, material.roughness);
         CreateTextures(normalData, material.normal);
-        CreateTextures(occlusionData, material.occlusion);
+        CreateTextures(AOData, material.AO);
     }
 
     void RenderResource::CreateTextures(const TextureData &textureData, Texture &targetTexture)
@@ -417,7 +417,7 @@ namespace XrayEngine
         storage.ringBufferEnds[vulkanRHI->GetCurrentFrameIndex()] = storage.ringBufferBegins[vulkanRHI->GetCurrentFrameIndex()];
     }
 
-    void RenderResource::UpdatePerFrameBuffer(std::shared_ptr<RenderScene> renderScene, std::shared_ptr<RenderCamera> camera)
+    void RenderResource::UpdatePerFramebuffer(std::shared_ptr<RenderScene> renderScene, std::shared_ptr<RenderCamera> camera)
     {
         glm::mat4 viewMatrix = camera->GetViewMatrix();
         glm::mat4 projectMatrix = camera->GetProjectMatrix();
@@ -436,7 +436,10 @@ namespace XrayEngine
             meshPerFrameStorageBufferObject.pointLights[i].intensity = pointLightIntensity;
         }
 
-        meshPerFrameStorageBufferObject.projectViewMatrix = projectMatrix * viewMatrix;
+        glm::mat4 projectViewMatrix = projectMatrix * viewMatrix;
+
+        meshPerFrameStorageBufferObject.projectViewMatrix = projectViewMatrix;
+        meshPerFrameStorageBufferObject.inverseProjectViewMatrix = glm::inverse(projectViewMatrix);
         meshPerFrameStorageBufferObject.cameraPosition = cameraPosition;
         meshPerFrameStorageBufferObject.ambientLight = ambientLight;
         meshPerFrameStorageBufferObject.pointLightCount = pointLightCount;

@@ -53,7 +53,7 @@ namespace XrayEngine
         material.metallicTexture = "asset/models/violin/Metallic.png";
         material.roughnessTexture = "asset/models/violin/Roughness.png";
         material.normalTexture = "asset/models/violin/Normal.png";
-        material.occlusionTexture = "asset/models/violin/AO.png";
+        material.AOTexture = "asset/models/violin/AO.png";
         RenderMaterialData materialData = renderResource->LoadMaterial(material);
 
         renderResource->CreateMeshes(meshData.vertices);
@@ -84,7 +84,7 @@ namespace XrayEngine
 
         renderResource->ResetRingBufferOffset();
 
-        renderResource->UpdatePerFrameBuffer(renderScene, renderCamera);
+        renderResource->UpdatePerFramebuffer(renderScene, renderCamera);
 
         vulkanRHI->PrepareBeforeRender();
 

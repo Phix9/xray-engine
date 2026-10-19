@@ -81,6 +81,7 @@ namespace XrayEngine
         void CommandSetScissor(const vk::CommandBuffer &commandBuffer, uint32_t firstScissor, const std::vector<vk::Rect2D> &scissors);
         void CommandBeginRenderPass(const vk::CommandBuffer &commandBuffer, const vk::RenderPassBeginInfo &beginInfo, vk::SubpassContents subpassContents);
         void CommandEndRenderPass(const vk::CommandBuffer &commandBuffer);
+        void CommandNextSubpass(const vk::CommandBuffer &commandbuffer, vk::SubpassContents contents);
         void CommandDraw(const vk::CommandBuffer &commandBuffer, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
         void CommandDrawIndexed(const vk::CommandBuffer &commandBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, uint32_t vertexOffset, uint32_t firstInstance);
         void CommandCopyBuffer(const vk::CommandBuffer &commandBuffer, const vk::Buffer &srcBuffer, const vk::Buffer &dstBuffer, const vk::BufferCopy &region);

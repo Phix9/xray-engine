@@ -16,10 +16,10 @@ struct PointLight
     float intensity_padding;
 };
 
-layout(location = 0) in vec3 position;
-layout(location = 1) in vec3 normal;
-layout(location = 2) in vec3 tangent;
-layout(location = 3) in vec2 texCoord;
+layout(location = 0) in vec3 inPosition;
+layout(location = 1) in vec3 inNormal;
+layout(location = 2) in vec3 inTangent;
+layout(location = 3) in vec2 inTexCoord;
 
 layout(location = 0) out vec3 outWorldPosition;
 layout(location = 1) out vec3 outNormal;
@@ -29,6 +29,7 @@ layout(location = 3) out vec2 outTexCoord;
 layout(set = 0, binding = 0) readonly buffer perframe
 {
     mat4 projectViewMatrix;
+    mat4 inverseProjectViewMatrix;
     vec3 cameraPosition;
     float cameraPosition_padding;
     vec3 ambientLight;
@@ -43,9 +44,9 @@ layout(set = 0, binding = 0) readonly buffer perframe
 
 void main()
 {
-    outTexCoord = texCoord;
-    outWorldPosition = position;
-    outTangent = tangent;
-    outNormal = normal;
-    gl_Position = projectViewMatrix * vec4(position, 1.0f);
+    outTexCoord = inTexCoord;
+    outWorldPosition = inPosition;
+    outTangent = inTangent;
+    outNormal = inNormal;
+    gl_Position = projectViewMatrix * vec4(inPosition, 1.0f);
 }

@@ -16,16 +16,19 @@ struct PointLight
     float intensity_padding;
 };
 
-layout(location = 0) in vec3 worldPosition;
-layout(location = 1) in vec3 normal;
-layout(location = 2) in vec3 tangent;
-layout(location = 3) in vec2 texCoord;
+const float PI = 3.14159265359;
+
+layout(location = 0) in vec3 inWorldPosition;
+layout(location = 1) in vec3 inNormal;
+layout(location = 2) in vec3 inTangent;
+layout(location = 3) in vec2 inTexCoord;
 
 layout(location = 0) out vec4 outColor;
 
 layout(set = 0, binding = 0) readonly buffer perframe
 {
     mat4 projectViewMatrix;
+    mat4 inverseProjectViewMatrix;
     vec3 cameraPosition;
     float cameraPosition_padding;
     vec3 ambientLight;
@@ -42,32 +45,30 @@ layout(set = 1, binding = 0) uniform sampler2D baseColorTexture;
 layout(set = 1, binding = 1) uniform sampler2D metallicTexture;
 layout(set = 1, binding = 2) uniform sampler2D roughnessTexture;
 layout(set = 1, binding = 3) uniform sampler2D normalTexture;
-layout(set = 1, binding = 4) uniform sampler2D occlusionTexture;
-
-const float PI = 3.14159265359;
+layout(set = 1, binding = 4) uniform sampler2D AOTexture;
 
 vec3 getBaseColor()
 {
-    vec3 baseColor = texture(baseColorTexture, texCoord).xyz;
+    vec3 baseColor = texture(baseColorTexture, inTexCoord).xyz;
     return baseColor;
 }
 
 vec3 calculateNormal()
 {
-    vec3 tangent_normal = texture(normalTexture, texCoord).xyz * 2.0 - 1.0;
+    vec3 tangentNormal = texture(normalTexture, inTexCoord).xyz * 2.0 - 1.0;
 
-    vec3 N = normalize(normal);
-    vec3 T = normalize(tangent.xyz);
+    vec3 N = normalize(inNormal);
+    vec3 T = normalize(inTangent.xyz);
     vec3 B = normalize(cross(N, T));
 
     mat3 TBN = mat3(T, B, N);
-    return normalize(TBN * tangent_normal);
+    return normalize(TBN * tangentNormal);
 }
 
 float DistributionGGX(float NdotH, float roughness)
 {
     float a = roughness * roughness;
-    float a2 = a*a;
+    float a2 = a * a;
     float NdotH2 = NdotH * NdotH;
 
     float nom = a2;
@@ -116,14 +117,16 @@ vec3 BRDF(vec3 L, vec3 V, vec3 N, vec3 F0, vec3 baseColor, float metallic, float
 void main()
 {   
     vec3 baseColor = getBaseColor();
-    float metallic = texture(metallicTexture, texCoord).z;
-    float roughness = texture(roughnessTexture, texCoord).z;
-    float occlusion = texture(occlusionTexture, texCoord).x;
+    float metallic = texture(metallicTexture, inTexCoord).z;
+    float roughness = texture(roughnessTexture, inTexCoord).z;
+    float AO = texture(AOTexture, inTexCoord).z;
 
     float dielectricSpecular = 0.04;
 
+    vec3 color = vec3(0.0);
+    
     vec3 N = calculateNormal();
-    vec3 V = normalize(cameraPosition - worldPosition);
+    vec3 V = normalize(cameraPosition - inWorldPosition);
     //vec3 R = reflect(-V, N);
     
     vec3 F0 = vec3(dielectricSpecular);
@@ -137,9 +140,9 @@ void main()
         float pointLightRadius = pointLights[i].radius;
         vec3 pointLightIntensity = pointLights[i].intensity;
 
-        vec3 L = normalize(pointLightPosition - worldPosition);
+        vec3 L = normalize(pointLightPosition - inWorldPosition);
 
-        float distance = length(pointLightPosition - worldPosition);
+        float distance = length(pointLightPosition - inWorldPosition);
         float attenuation = 1.0 / (distance * distance + 1.0);
         vec3 radiance = pointLightIntensity * attenuation;
 
@@ -148,9 +151,9 @@ void main()
         Lo += BRDF(L, V, N, F0, baseColor, metallic, roughness) * radiance * NdotL;
     }
 
-    vec3 ambient = ambientLight * baseColor * occlusion;
+    vec3 ambient = ambientLight * baseColor * AO;
     
-    vec3 color = ambient + Lo;
+    color = ambient + Lo;
 
     outColor = vec4(color, 1.0);
 }

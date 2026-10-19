@@ -279,7 +279,7 @@ namespace XrayEngine
     void VulkanRHI::CreateDescriptorPool()
     {
         std::vector<vk::DescriptorPoolSize> poolSizes;
-        poolSizes.resize(3);
+        poolSizes.resize(4);
 
         poolSizes[0].setType(vk::DescriptorType::eUniformBuffer)
             .setDescriptorCount(1);
@@ -287,10 +287,12 @@ namespace XrayEngine
             .setDescriptorCount(1);
         poolSizes[2].setType(vk::DescriptorType::eCombinedImageSampler)
             .setDescriptorCount(5);
+        poolSizes[3].setType(vk::DescriptorType::eInputAttachment)
+            .setDescriptorCount(4);
 
         vk::DescriptorPoolCreateInfo createInfo;
         createInfo.setPoolSizes(poolSizes)
-            .setMaxSets(2);
+            .setMaxSets(3);
 
         // TODO:: ERROR CHECK
         descriptorPool = device.createDescriptorPool(createInfo);
@@ -424,7 +426,7 @@ namespace XrayEngine
 
     vk::Extent2D VulkanRHI::ChooseSwapchainExtent(const vk::SurfaceCapabilitiesKHR &capabilities)
     {
-        if (capabilities.currentExtent != UINT32_MAX)
+        if (capabilities.currentExtent.width != UINT32_MAX)
         {
             return capabilities.currentExtent;
         }
@@ -785,6 +787,11 @@ namespace XrayEngine
     void VulkanRHI::CommandEndRenderPass(const vk::CommandBuffer &commandBuffer)
     {
         commandBuffer.endRenderPass();
+    }
+
+    void VulkanRHI::CommandNextSubpass(const vk::CommandBuffer &commandBuffer, vk::SubpassContents contents)
+    {
+        commandBuffer.nextSubpass(contents);
     }
 
     void VulkanRHI::CommandDraw(const vk::CommandBuffer &commandBuffer, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)

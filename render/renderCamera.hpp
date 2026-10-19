@@ -9,6 +9,8 @@
 
 namespace XrayEngine
 {
+    static constexpr float PI = 3.14159265358979323846264338327950288f;
+
     struct RenderCameraInitInfo
     {
         std::shared_ptr<InputSystem> inputSystem;
@@ -29,7 +31,7 @@ namespace XrayEngine
     private:
         std::shared_ptr<InputSystem> inputSystem;
 
-        glm::vec3 position{0.0f, -2.0f, 0.0f};
+        glm::vec3 position{0.0f, 0.5f, 0.0f};
         glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
         glm::vec3 upAxis{Z};
 
@@ -42,7 +44,7 @@ namespace XrayEngine
         float moveSpeed{0.001f};
         float rotateSpeed{0.0025f};
 
-        float yaw{0.0f};
+        float yaw{PI};
         float pitch{0.0f};
 
         void Move();

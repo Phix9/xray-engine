@@ -11,6 +11,6 @@ namespace XrayEngine
         std::string metallicTexture;
         std::string roughnessTexture;
         std::string normalTexture;
-        std::string occlusionTexture;
+        std::string AOTexture;
     };
 }

@@ -39,7 +39,7 @@ namespace XrayEngine
         TextureData metallic;
         TextureData roughness;
         TextureData normal;
-        TextureData occlusion;
+        TextureData AO;
     };
     
     struct Mesh
@@ -67,7 +67,7 @@ namespace XrayEngine
         Texture metallic;
         Texture roughness;
         Texture normal;
-        Texture occlusion;
+        Texture AO;
     };
 
     struct Storage
@@ -105,6 +105,7 @@ namespace XrayEngine
     struct MeshPerFrameStorageBufferObject
     {
         glm::mat4 projectViewMatrix;
+        glm::mat4 inverseProjectViewMatrix;
         glm::vec3 cameraPosition;
         float cameraPosition_padding{0.0f};
         glm::vec3 ambientLight;
@@ -142,7 +143,7 @@ namespace XrayEngine
         void CreateTextures(const TextureData &textureData, Texture &targetTexture);
         void CreateStorageBuffer();
         void ResetRingBufferOffset();
-        void UpdatePerFrameBuffer(std::shared_ptr<RenderScene> renderScene, std::shared_ptr<RenderCamera> camera);
+        void UpdatePerFramebuffer(std::shared_ptr<RenderScene> renderScene, std::shared_ptr<RenderCamera> camera);
         void TransitionImageLayout(vk::Image image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
     };
 }
