@@ -1,7 +1,8 @@
 #pragma once
 
 #include <vulkan/vulkan.hpp>
-#include "light.hpp"
+#include "render/object/sceneObject.hpp"
+#include "render/light.hpp"
 
 namespace XrayEngine
 {
@@ -11,5 +12,7 @@ namespace XrayEngine
         AmbientLight ambientLight;
         DirectionLight directionLight;
         PointLightList pointLightList;
+
+        std::vector<SceneObject> objects;
     };
 }

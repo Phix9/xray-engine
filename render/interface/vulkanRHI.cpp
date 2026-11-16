@@ -278,23 +278,25 @@ namespace XrayEngine
 
     void VulkanRHI::CreateDescriptorPool()
     {
+        constexpr uint32_t maxMaterialCount = 128;
+        constexpr uint32_t maxTextureCountPerMaterial = 16;
+
         std::vector<vk::DescriptorPoolSize> poolSizes;
         poolSizes.resize(4);
 
         poolSizes[0].setType(vk::DescriptorType::eUniformBuffer)
-            .setDescriptorCount(1);
+            .setDescriptorCount(maxMaterialCount);
         poolSizes[1].setType(vk::DescriptorType::eStorageBufferDynamic)
             .setDescriptorCount(1);
         poolSizes[2].setType(vk::DescriptorType::eCombinedImageSampler)
-            .setDescriptorCount(5);
+            .setDescriptorCount(maxMaterialCount * maxTextureCountPerMaterial);
         poolSizes[3].setType(vk::DescriptorType::eInputAttachment)
             .setDescriptorCount(4);
 
         vk::DescriptorPoolCreateInfo createInfo;
         createInfo.setPoolSizes(poolSizes)
-            .setMaxSets(3);
+            .setMaxSets(2 + maxMaterialCount);
 
-        // TODO:: ERROR CHECK
         descriptorPool = device.createDescriptorPool(createInfo);
     }
 

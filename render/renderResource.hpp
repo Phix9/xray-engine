@@ -2,13 +2,12 @@
 
 #include <unordered_map>
 #include <vulkan/vulkan.hpp>
-#include <stb_image.h>
 #include <tiny_obj_loader.h>
 #include <glm/glm.hpp>
 
+#include "resource/assetLoader.hpp"
 #include "render/interface/vulkanRHI.hpp"
-#include "render/mesh.hpp"
-#include "render/material.hpp"
+#include "render/renderData.hpp"
 #include "render/renderScene.hpp"
 #include "render/renderCamera.hpp"
 
@@ -18,31 +17,8 @@ namespace XrayEngine
     {
         std::shared_ptr<VulkanRHI> vulkanRHI;
     };
-
-    struct MeshData
-    {
-        std::vector<MeshVertex> vertices;
-        std::vector<uint32_t> indices;
-    };
-
-    struct TextureData
-    {
-        uint32_t width{0};
-        uint32_t height{0};
-        void* pixels{nullptr};
-        vk::Format format{vk::Format::eUndefined};
-    };
-
-    struct RenderMaterialData
-    {
-        TextureData baseColor;
-        TextureData metallic;
-        TextureData roughness;
-        TextureData normal;
-        TextureData AO;
-    };
     
-    struct Mesh
+    struct RHIMesh
     {
         uint32_t vertexCount{0};
         uint32_t indexCount{0};
@@ -54,20 +30,22 @@ namespace XrayEngine
         vk::DeviceMemory indexBufferMemory;
     };
 
-    struct Texture
+    struct RHITexture
     {
         vk::Image image;
         vk::ImageView imageView;
         vk::DeviceMemory memory;
     };
 
-    struct RenderMaterial
-    {
-        Texture baseColor;
-        Texture metallic;
-        Texture roughness;
-        Texture normal;
-        Texture AO;
+    struct RHIMaterial 
+    {   
+        std::vector<int> textureReferences;
+        
+        vk::Buffer materialUniformBuffer;
+        vk::DeviceMemory materialUniformBufferMemory;
+
+        vk::DescriptorSetLayout descriptorSetLayout;
+        vk::DescriptorSet descriptorSet;
     };
 
     struct Storage
@@ -118,32 +96,45 @@ namespace XrayEngine
         DirectionalLightObject directionalLight;
     };
 
+    struct MeshPerMaterialUniformBufferObject
+    {
+        std::vector<float> uniforms;
+    };
+
     class RenderResource
     {
     public:
         std::shared_ptr<VulkanRHI> vulkanRHI;
 
-        std::vector<Mesh> meshes;
-        std::vector<Texture> textures;
+        std::vector<RHITexture> texturePool;
 
-        Mesh mesh;
-        RenderMaterial material;
+        std::vector<RHIMesh> meshes;
+        std::vector<RHIMaterial> materials;
+
+        std::vector<uint32_t> renderObjects;
+        std::vector<RenderEntity> renderEntities;
+
+        std::vector<MeshData> meshDatas;
+        std::vector<TextureData> textureDatas;
+        std::vector<MaterialData> materialDatas;
+
+        vk::Sampler sampler;
+
         Storage storage;
 
         MeshPerFrameStorageBufferObject meshPerFrameStorageBufferObject;
 
         void Initialize(RenderResourceInitInfo initInfo);
         void Quit();
-        MeshData LoadMesh(std::string filePath);
-        TextureData LoadTexture(std::string filePath, bool isSRGB);
-        RenderMaterialData LoadMaterial(Material material);
-        void CreateMeshes(const std::vector<MeshVertex> &meshData);
-        void CreateIndices(const std::vector<uint32_t> &indices);
-        void CreateMaterial(const RenderMaterialData &materialData);
-        void CreateTextures(const TextureData &textureData, Texture &targetTexture);
+        void CreateModel(std::string filePath);
         void CreateStorageBuffer();
         void ResetRingBufferOffset();
         void UpdatePerFramebuffer(std::shared_ptr<RenderScene> renderScene, std::shared_ptr<RenderCamera> camera);
         void TransitionImageLayout(vk::Image image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+
+    private:
+        RHIMesh CreateMesh(const MeshData &meshData);
+        RHITexture CreateTexture(const TextureData &textureData);
+        RHIMaterial CreateMaterial(const MaterialData &materialData);
     };
 }

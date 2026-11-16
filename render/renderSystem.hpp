@@ -40,5 +40,7 @@ namespace XrayEngine
         std::shared_ptr<RenderCamera> renderCamera;
         std::shared_ptr<RenderResource> renderResource;
         std::shared_ptr<MainCameraPass> mainCameraPass;
+
+        void ProcessRenderData();
     };
 }

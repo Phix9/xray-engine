@@ -46,19 +46,20 @@ namespace XrayEngine
         renderResourceInitInfo.vulkanRHI = vulkanRHI;
         renderResource = std::make_shared<RenderResource>();
         renderResource->Initialize(renderResourceInitInfo);
-        MeshData meshData = renderResource->LoadMesh("asset/models/violin/violin.obj");
 
-        Material material;
-        material.baseColorTexture = "asset/models/violin/BaseColor.png";
-        material.metallicTexture = "asset/models/violin/Metallic.png";
-        material.roughnessTexture = "asset/models/violin/Roughness.png";
-        material.normalTexture = "asset/models/violin/Normal.png";
-        material.AOTexture = "asset/models/violin/AO.png";
-        RenderMaterialData materialData = renderResource->LoadMaterial(material);
+        // MeshData meshData = renderResource->LoadMesh("asset/models/violin/violin.obj");
 
-        renderResource->CreateMeshes(meshData.vertices);
-        renderResource->CreateMaterial(materialData);
-        renderResource->CreateStorageBuffer();
+        // // Material material;
+        // // material.baseColorTexture = "asset/models/violin/BaseColor.png";
+        // // material.metallicTexture = "asset/models/violin/Metallic.png";
+        // // material.roughnessTexture = "asset/models/violin/Roughness.png";
+        // // material.normalTexture = "asset/models/violin/Normal.png";
+        // // material.AOTexture = "asset/models/violin/AO.png";
+        // // PBRMaterialData materialData = renderResource->LoadMaterial(material);
+
+        // renderResource->CreateMeshes(meshData.vertices);
+        // renderResource->CreateMaterial(materialData);
+        // renderResource->CreateStorageBuffer();
 
         MainCameraPassInitInfo mainCameraPassInitInfo;
         mainCameraPassInitInfo.vulkanRHI = vulkanRHI;
@@ -66,7 +67,7 @@ namespace XrayEngine
         mainCameraPass = std::make_shared<MainCameraPass>();
         mainCameraPass->Initialize(&mainCameraPassInitInfo);
 
-        renderResource->CreateIndices(meshData.indices);
+        // renderResource->CreateIndices(meshData.indices);
     }
     
     void RenderSystem::Quit()
@@ -91,5 +92,10 @@ namespace XrayEngine
         mainCameraPass->Draw();
 
         vulkanRHI->SubmitRendering();
+    }
+
+    void RenderSystem::ProcessRenderData()
+    {
+        
     }
 }

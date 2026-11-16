@@ -1,7 +1,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define TINYOBJLOADER_IMPLEMENTATION
 
-#include <cmath>
+#include <cstdlib>
 
 #include "render/renderResource.hpp"
 
@@ -9,23 +9,12 @@ namespace XrayEngine
 {
     void RenderResource::Initialize(RenderResourceInitInfo initInfo)
     {
-        vulkanRHI=initInfo.vulkanRHI;
+        vulkanRHI = initInfo.vulkanRHI;
+        sampler = vulkanRHI->CreateDefaultLinearSampler();
     }
 
     void RenderResource::Quit()
     {
-        if (mesh.vertexBuffer)
-        {
-            vulkanRHI->DestroyBuffer(mesh.vertexBuffer);
-            vulkanRHI->FreeMemory(mesh.vertexBufferMemory);
-        }
-
-        if (mesh.indexBuffer)
-        {
-            vulkanRHI->DestroyBuffer(mesh.indexBuffer);
-            vulkanRHI->FreeMemory(mesh.indexBufferMemory);
-        }
-
         if (storage.ringBuffer)
         {
             if (storage.mappedMemory)
@@ -37,280 +26,147 @@ namespace XrayEngine
             vulkanRHI->FreeMemory(storage.ringBufferMemory);
         }
 
-        for (Mesh &m : meshes)
+        for (RHIMaterial &material : materials)
         {
-            vulkanRHI->DestroyBuffer(m.vertexBuffer);
-            vulkanRHI->FreeMemory(m.vertexBufferMemory);
-            vulkanRHI->DestroyBuffer(m.indexBuffer);
-            vulkanRHI->FreeMemory(m.indexBufferMemory);
-        }
-        meshes.clear();
-
-        for (Texture &t : textures)
-        {
-            vulkanRHI->DestroyImageView(t.imageView);
-            vulkanRHI->DestroyImage(t.image);
-            vulkanRHI->FreeMemory(t.memory);
-        }
-        textures.clear();
-    }
-
-    MeshData RenderResource::LoadMesh(std::string filePath)
-    {
-        tinyobj::attrib_t attrib;
-        std::vector<tinyobj::shape_t> shapes;
-        std::vector<tinyobj::material_t> materials;
-        std::string warn, err;
-
-        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filePath.c_str()))
-        {
-            throw std::runtime_error(warn + err);
-        }
-
-        MeshData meshData;
-
-        std::unordered_map<MeshVertex, uint32_t> uniqueVertices{};
-
-        for (const auto &shape : shapes)
-        {
-            for (const auto &index : shape.mesh.indices)
+            if (material.materialUniformBuffer)
             {
-                MeshVertex vertex{};
+                vulkanRHI->DestroyBuffer(material.materialUniformBuffer);
+                vulkanRHI->FreeMemory(material.materialUniformBufferMemory);
+            }
 
-                vertex.position = {
-                    attrib.vertices[3 * index.vertex_index + 0],
-                    attrib.vertices[3 * index.vertex_index + 1],
-                    attrib.vertices[3 * index.vertex_index + 2]};
-
-                vertex.normal = {
-                    attrib.normals[3 * index.normal_index + 0],
-                    attrib.normals[3 * index.normal_index + 1],
-                    attrib.normals[3 * index.normal_index + 2]};
-
-                vertex.texCoord = {
-                    attrib.texcoords[2 * index.texcoord_index + 0],
-                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1]};
-
-                if (uniqueVertices.count(vertex) == 0) 
-                {
-                    uniqueVertices[vertex] = static_cast<uint32_t>(meshData.vertices.size());
-                    meshData.vertices.push_back(vertex);
-                }
-
-                meshData.indices.push_back(uniqueVertices[vertex]);
+            if (material.descriptorSetLayout)
+            {
+                vulkanRHI->DestroyDescriptorSetLayout(material.descriptorSetLayout);
             }
         }
 
-        std::vector<glm::vec3> tangentAccumulators(meshData.vertices.size(), glm::vec3(0.0f));
-
-        for (size_t i = 0; i + 2 < meshData.indices.size(); i += 3)
+        for (RHIMesh &mesh : meshes)
         {
-            const uint32_t i0 = meshData.indices[i + 0];
-            const uint32_t i1 = meshData.indices[i + 1];
-            const uint32_t i2 = meshData.indices[i + 2];
-
-            const MeshVertex &v0 = meshData.vertices[i0];
-            const MeshVertex &v1 = meshData.vertices[i1];
-            const MeshVertex &v2 = meshData.vertices[i2];
-
-            const glm::vec3 edge1 = v1.position - v0.position;
-            const glm::vec3 edge2 = v2.position - v0.position;
-            const glm::vec2 deltaUV1 = v1.texCoord - v0.texCoord;
-            const glm::vec2 deltaUV2 = v2.texCoord - v0.texCoord;
-
-            const float determinant = deltaUV1.x * deltaUV2.y - deltaUV1.y * deltaUV2.x;
-            if (std::abs(determinant) < 1e-8f)
+            if (mesh.vertexBuffer)
             {
-                continue;
+                vulkanRHI->DestroyBuffer(mesh.vertexBuffer);
+                vulkanRHI->FreeMemory(mesh.vertexBufferMemory);
             }
 
-            const float r = 1.0f / determinant;
-            const glm::vec3 tangent = (edge1 * deltaUV2.y - edge2 * deltaUV1.y) * r;
-
-            tangentAccumulators[i0] += tangent;
-            tangentAccumulators[i1] += tangent;
-            tangentAccumulators[i2] += tangent;
+            if (mesh.indexBuffer)
+            {
+                vulkanRHI->DestroyBuffer(mesh.indexBuffer);
+                vulkanRHI->FreeMemory(mesh.indexBufferMemory);
+            }
         }
 
-        for (size_t i = 0; i < meshData.vertices.size(); ++i)
+        for (RHITexture &texture : texturePool)
         {
-            glm::vec3 tangent = tangentAccumulators[i];
-            const glm::vec3 &normal = meshData.vertices[i].normal;
-
-            if (glm::dot(tangent, tangent) > 1e-12f)
+            if (texture.imageView)
             {
-                tangent -= normal * glm::dot(normal, tangent);
+                vulkanRHI->DestroyImageView(texture.imageView);
             }
 
-            const float length = glm::length(tangent);
-            if (length > 1e-6f)
+            if (texture.image)
             {
-                tangent /= length;
+                vulkanRHI->DestroyImage(texture.image);
+                vulkanRHI->FreeMemory(texture.memory);
             }
-            else
+        }
+
+        for (TextureData &textureData : textureDatas)
+        {
+            if (textureData.pixels)
             {
-                const glm::vec3 fallback = std::abs(normal.x) < 0.9f ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
-                tangent = glm::normalize(fallback - normal * glm::dot(normal, fallback));
+                std::free(textureData.pixels);
+                textureData.pixels = nullptr;
             }
-
-            meshData.vertices[i].tangent = tangent;
         }
 
-        return meshData;
+        if (sampler)
+        {
+            vulkanRHI->DestroySampler(sampler);
+        }
     }
 
-    TextureData RenderResource::LoadTexture(std::string filePath, bool isSRGB)
+    void RenderResource::CreateModel(std::string filePath)
     {
-        int width, height, nrChannel;
-        stbi_uc* pixels = stbi_load(filePath.data(), &width, &height, &nrChannel, STBI_rgb_alpha);
+        AssetLoader::LoadModel(filePath, renderObjects, renderEntities, meshDatas, materialDatas, textureDatas);
 
-        if (!pixels)
+        for (MeshData &meshData : meshDatas)
         {
-            throw std::runtime_error("Load image failed");
+            meshes.push_back(CreateMesh(meshData));
+        }
+        
+        for (TextureData &textureData : textureDatas)
+        {
+            texturePool.push_back(CreateTexture(textureData));
         }
 
-        TextureData textureData;
-        textureData.width = width;
-        textureData.height = height;
-        textureData.pixels = pixels;
-        textureData.format = isSRGB? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm;
-
-        return textureData;
+        for (MaterialData &materialData : materialDatas)
+        {
+            materials.push_back(CreateMaterial(materialData));
+        }
     }
 
-    RenderMaterialData RenderResource::LoadMaterial(Material material)
+    RHIMesh RenderResource::CreateMesh(const MeshData &meshData)
     {
-        RenderMaterialData materialData;
-        if (!material.baseColorTexture.empty())
+        RHIMesh mesh;
+
         {
-            materialData.baseColor = LoadTexture(material.baseColorTexture, true);
+            mesh.vertexCount = static_cast<uint32_t>(meshData.vertices.size());
+            vk::DeviceSize meshSize = meshData.vertices.size() * sizeof(MeshVertex);
+            vk::Buffer stagingBuffer;
+            vk::DeviceMemory stagingBufferMemory;
+
+            vk::BufferCreateInfo createInfo;
+            createInfo.setSize(meshSize)
+                .setUsage(vk::BufferUsageFlagBits::eTransferSrc)
+                .setSharingMode(vk::SharingMode::eExclusive);
+            stagingBuffer = vulkanRHI->CreateBuffer(createInfo, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBufferMemory);
+
+            createInfo.setSize(meshSize)
+                .setUsage(vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer)
+                .setSharingMode(vk::SharingMode::eExclusive);
+            mesh.vertexBuffer = vulkanRHI->CreateBuffer(createInfo, vk::MemoryPropertyFlagBits::eDeviceLocal, mesh.vertexBufferMemory);
+
+            void *ptr = vulkanRHI->MapMemory(stagingBufferMemory, 0, meshSize);
+            memcpy(ptr, meshData.vertices.data(), meshSize);
+            vulkanRHI->UnmapMemory(stagingBufferMemory);
+
+            vk::CommandBuffer commandBuffer = vulkanRHI->BeginOneTimeCommandBuffer();
+
+            vk::BufferCopy region;
+            region.setSrcOffset(0)
+                .setDstOffset(0)
+                .setSize(meshSize);
+
+            vulkanRHI->CommandCopyBuffer(commandBuffer, stagingBuffer, mesh.vertexBuffer, region);
+
+            vulkanRHI->EndOneTimeCommandBuffer(commandBuffer);
+
+            vulkanRHI->DestroyBuffer(stagingBuffer);
+            vulkanRHI->FreeMemory(stagingBufferMemory);
         }
 
-        if (!material.metallicTexture.empty())
         {
-            materialData.metallic = LoadTexture(material.metallicTexture, false);
+            mesh.indexCount = static_cast<uint32_t>(meshData.indices.size());
+
+            vk::DeviceSize indexSize = meshData.indices.size() * sizeof(uint32_t);
+
+            vk::BufferCreateInfo createInfo;
+            createInfo.setSize(indexSize)
+                .setUsage(vk::BufferUsageFlagBits::eIndexBuffer)
+                .setSharingMode(vk::SharingMode::eExclusive);
+            mesh.indexBuffer = vulkanRHI->CreateBuffer(createInfo, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, mesh.indexBufferMemory);
+
+            void *ptr = vulkanRHI->MapMemory(mesh.indexBufferMemory, 0, indexSize);
+            memcpy(ptr, meshData.indices.data(), indexSize);
+            vulkanRHI->UnmapMemory(mesh.indexBufferMemory);
         }
 
-        if (!material.roughnessTexture.empty())
-        {
-            materialData.roughness = LoadTexture(material.roughnessTexture, false);
-        }
-
-        if (!material.normalTexture.empty())
-        {
-            materialData.normal = LoadTexture(material.normalTexture, false);
-        }
-
-        if (!material.AOTexture.empty())
-        {
-            materialData.AO = LoadTexture(material.AOTexture, false);
-        }
-        return materialData;
+        return mesh;
     }
 
-    void RenderResource::CreateMeshes(const std::vector<MeshVertex> &vertices)
+    RHITexture RenderResource::CreateTexture(const TextureData &textureData)
     {
-        mesh.vertexCount = static_cast<uint32_t>(vertices.size());
-        vk::DeviceSize meshSize = vertices.size() * sizeof(MeshVertex);
-        vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingBufferMemory;
+        RHITexture texture;
 
-        vk::BufferCreateInfo createInfo;
-        createInfo.setSize(meshSize)
-            .setUsage(vk::BufferUsageFlagBits::eTransferSrc)
-            .setSharingMode(vk::SharingMode::eExclusive);
-        stagingBuffer = vulkanRHI->CreateBuffer(createInfo, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBufferMemory);
-
-        createInfo.setSize(meshSize)
-            .setUsage(vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer)
-            .setSharingMode(vk::SharingMode::eExclusive);
-        mesh.vertexBuffer = vulkanRHI->CreateBuffer(createInfo, vk::MemoryPropertyFlagBits::eDeviceLocal, mesh.vertexBufferMemory);
-
-        void *ptr = vulkanRHI->MapMemory(stagingBufferMemory, 0, meshSize);
-        memcpy(ptr, vertices.data(), meshSize);
-        vulkanRHI->UnmapMemory(stagingBufferMemory);
-
-        vk::CommandBuffer commandBuffer = vulkanRHI->BeginOneTimeCommandBuffer();
-
-        vk::BufferCopy region;
-        region.setSrcOffset(0)
-            .setDstOffset(0)
-            .setSize(meshSize);
-
-        vulkanRHI->CommandCopyBuffer(commandBuffer, stagingBuffer, mesh.vertexBuffer, region);
-
-        vulkanRHI->EndOneTimeCommandBuffer(commandBuffer);
-
-        vulkanRHI->DestroyBuffer(stagingBuffer);
-        vulkanRHI->FreeMemory(stagingBufferMemory);
-    }
-
-    void RenderResource::CreateIndices(const std::vector<uint32_t> &indices)
-    {
-        mesh.indexCount = static_cast<uint32_t>(indices.size());
-
-        vk::DeviceSize indexSize = indices.size() * sizeof(uint32_t);
-
-        vk::BufferCreateInfo createInfo;
-        createInfo.setSize(indexSize)
-            .setUsage(vk::BufferUsageFlagBits::eIndexBuffer)
-            .setSharingMode(vk::SharingMode::eExclusive);
-        mesh.indexBuffer = vulkanRHI->CreateBuffer(createInfo, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, mesh.indexBufferMemory);
-
-        void *ptr = vulkanRHI->MapMemory(mesh.indexBufferMemory, 0, indexSize);
-        memcpy(ptr, indices.data(), indexSize);
-        vulkanRHI->UnmapMemory(mesh.indexBufferMemory);
-    }
-
-    void RenderResource::CreateMaterial(const RenderMaterialData &materialData)
-    {
-        float emptyPixel[4] = {0.5f, 0.5f, 0.5f, 0.5f};
-
-        TextureData baseColor;
-        baseColor.width = 1;
-        baseColor.height = 1;
-        baseColor.pixels = emptyPixel;
-        baseColor.format = vk::Format::eR8G8B8A8Srgb;
-
-        TextureData metallic;
-        metallic.width = 1;
-        metallic.height = 1;
-        metallic.pixels = emptyPixel;
-        metallic.format = vk::Format::eR8G8B8A8Unorm;
-
-        TextureData roughness;
-        roughness.width = 1;
-        roughness.height = 1;
-        roughness.pixels = emptyPixel;
-        roughness.format = vk::Format::eR8G8B8A8Unorm;
-
-        TextureData normal;
-        normal.width = 1;
-        normal.height = 1;
-        normal.pixels = emptyPixel;
-        normal.format = vk::Format::eR8G8B8A8Unorm;
-
-        TextureData AO;
-        AO.width = 1;
-        AO.height = 1;
-        AO.pixels = emptyPixel;
-        AO.format = vk::Format::eR8G8B8A8Unorm;
-
-        const TextureData baseColorData = materialData.baseColor.pixels ? materialData.baseColor : baseColor;
-        const TextureData metallicData = materialData.metallic.pixels ? materialData.metallic : metallic;
-        const TextureData roughnessData = materialData.roughness.pixels ? materialData.roughness : roughness;
-        const TextureData normalData = materialData.normal.pixels ? materialData.normal : normal;
-        const TextureData AOData = materialData.AO.pixels ? materialData.AO : AO;
-
-        CreateTextures(baseColorData, material.baseColor);
-        CreateTextures(metallicData, material.metallic);
-        CreateTextures(roughnessData, material.roughness);
-        CreateTextures(normalData, material.normal);
-        CreateTextures(AOData, material.AO);
-    }
-
-    void RenderResource::CreateTextures(const TextureData &textureData, Texture &targetTexture)
-    {
         vk::DeviceSize textureSize = textureData.width * textureData.height * 4;
 
         vk::Buffer stagingBuffer;
@@ -337,7 +193,7 @@ namespace XrayEngine
             .setUsage(vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled)
             .setSamples(vk::SampleCountFlagBits::e1);
 
-        targetTexture.image = vulkanRHI->CreateImage(createInfo, vk::MemoryPropertyFlagBits::eDeviceLocal, targetTexture.memory);
+        texture.image = vulkanRHI->CreateImage(createInfo, vk::MemoryPropertyFlagBits::eDeviceLocal, texture.memory);
         
         vk::ImageSubresourceRange range;
         range.setAspectMask(vk::ImageAspectFlagBits::eColor)
@@ -346,14 +202,14 @@ namespace XrayEngine
             .setLevelCount(1)
             .setBaseMipLevel(0);
         vk::ImageViewCreateInfo imageViewCreateInfo;
-        imageViewCreateInfo.setImage(targetTexture.image)
+        imageViewCreateInfo.setImage(texture.image)
             .setViewType(vk::ImageViewType::e2D)
             .setFormat(createInfo.format)
             .setSubresourceRange(range);
         
-        targetTexture.imageView = vulkanRHI->CreateImageView(imageViewCreateInfo);
+        texture.imageView = vulkanRHI->CreateImageView(imageViewCreateInfo);
 
-        TransitionImageLayout(targetTexture.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+        TransitionImageLayout(texture.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
 
         vk::CommandBuffer commandBuffer = vulkanRHI->BeginOneTimeCommandBuffer();
 
@@ -370,21 +226,132 @@ namespace XrayEngine
             .setImageExtent({textureData.width, textureData.height, 1})
             .setImageSubresource(layers);
 
-        vulkanRHI->CommandCopyBufferToImage(commandBuffer, stagingBuffer, targetTexture.image, vk::ImageLayout::eTransferDstOptimal ,region);
+        vulkanRHI->CommandCopyBufferToImage(commandBuffer, stagingBuffer, texture.image, vk::ImageLayout::eTransferDstOptimal ,region);
 
         vulkanRHI->EndOneTimeCommandBuffer(commandBuffer);
         
-        TransitionImageLayout(targetTexture.image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+        TransitionImageLayout(texture.image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
     
         vulkanRHI->DestroyBuffer(stagingBuffer);
         vulkanRHI->FreeMemory(stagingBufferMemory);
+
+        return texture;
+    }
+
+    RHIMaterial RenderResource::CreateMaterial(const MaterialData &materialData)
+    {
+        RHIMaterial material;
+
+        {
+            for (const Parameter<TextureInfoData> &texture : materialData.textures)
+            {
+                if (texture.value.textureIndex >= 0)
+                {
+                    material.textureReferences.push_back(texture.value.textureIndex);
+                }
+            }
+
+            MeshPerMaterialUniformBufferObject meshPerMaterialUniformBufferObject;
+
+            for (const Parameter<MaterialData::Vector> &vector : materialData.vectors)
+            {
+                meshPerMaterialUniformBufferObject.uniforms.push_back(vector.value.x);
+                meshPerMaterialUniformBufferObject.uniforms.push_back(vector.value.y);
+                meshPerMaterialUniformBufferObject.uniforms.push_back(vector.value.z);
+                meshPerMaterialUniformBufferObject.uniforms.push_back(vector.value.w);
+            }
+
+            for (const Parameter<MaterialData::Scalar> &scalar : materialData.scalars)
+            {
+                meshPerMaterialUniformBufferObject.uniforms.push_back(scalar.value);
+            }
+
+            meshPerMaterialUniformBufferObject.uniforms.push_back(materialData.alphaCutoff);
+            meshPerMaterialUniformBufferObject.uniforms.push_back(static_cast<float>(static_cast<uint32_t>(materialData.alphaMode)));
+            meshPerMaterialUniformBufferObject.uniforms.push_back(static_cast<float>(materialData.doubleSided));
+
+            const vk::DeviceSize uboSize = meshPerMaterialUniformBufferObject.uniforms.size() * sizeof(float);
+
+            vk::BufferCreateInfo createInfo;
+            createInfo.setSize(uboSize)
+                .setUsage(vk::BufferUsageFlagBits::eUniformBuffer)
+                .setSharingMode(vk::SharingMode::eExclusive);
+            material.materialUniformBuffer = vulkanRHI->CreateBuffer(createInfo, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, material.materialUniformBufferMemory);
+
+            void *ptr = vulkanRHI->MapMemory(material.materialUniformBufferMemory, 0, uboSize);
+            memcpy(ptr, meshPerMaterialUniformBufferObject.uniforms.data(), uboSize);
+            vulkanRHI->UnmapMemory(material.materialUniformBufferMemory);
+        }
+
+        {
+            const uint32_t textureCount = static_cast<uint32_t>(material.textureReferences.size());
+
+            std::vector<vk::DescriptorSetLayoutBinding> meshPerMaterialBindings;
+            meshPerMaterialBindings.reserve(static_cast<size_t>(textureCount) + 1);
+
+            for (uint32_t i = 0; i < textureCount; i++)
+            {
+                meshPerMaterialBindings.push_back(vk::DescriptorSetLayoutBinding().setBinding(i).setDescriptorType(vk::DescriptorType::eCombinedImageSampler).setDescriptorCount(1).setStageFlags(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute));
+            }
+
+            meshPerMaterialBindings.push_back(vk::DescriptorSetLayoutBinding().setBinding(textureCount).setDescriptorType(vk::DescriptorType::eUniformBuffer).setDescriptorCount(1).setStageFlags(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment));
+
+            vk::DescriptorSetLayoutCreateInfo createInfo;
+            createInfo.setBindings(meshPerMaterialBindings);
+
+            material.descriptorSetLayout = vulkanRHI->CreateDescriptorSetLayout(createInfo);
+        }
+
+        {
+            vk::DescriptorSetAllocateInfo allocateInfo;
+            allocateInfo.setDescriptorPool(vulkanRHI->GetDescriptorPool())
+                .setDescriptorSetCount(1)
+                .setSetLayouts(material.descriptorSetLayout);
+
+            material.descriptorSet = vulkanRHI->AllocateDescriptorSets(allocateInfo);
+
+            const uint32_t textureCount = static_cast<uint32_t>(material.textureReferences.size());
+
+            std::vector<vk::DescriptorImageInfo> imageInfos;
+            imageInfos.reserve(textureCount);
+            for (uint32_t i = 0; i < textureCount; i++)
+            {
+                imageInfos.push_back(vk::DescriptorImageInfo().setSampler(sampler)
+                                         .setImageView(texturePool[material.textureReferences[i]].imageView)
+                                         .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));
+            }
+
+            std::vector<vk::WriteDescriptorSet> writes;
+            writes.reserve(static_cast<size_t>(textureCount) + 1);
+
+            for (uint32_t i = 0; i < textureCount; i++)
+            {
+                writes.push_back(vk::WriteDescriptorSet().setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                                     .setImageInfo(imageInfos[i])
+                                     .setDstSet(material.descriptorSet)
+                                     .setDstBinding(i)
+                                     .setDescriptorCount(1));
+            }
+
+            vk::DescriptorBufferInfo bufferInfo;
+            bufferInfo.setOffset(0)
+                .setRange(vk::WholeSize)
+                .setBuffer(material.materialUniformBuffer);
+
+            writes.push_back(vk::WriteDescriptorSet().setDescriptorType(vk::DescriptorType::eUniformBuffer)
+                                 .setBufferInfo(bufferInfo)
+                                 .setDstSet(material.descriptorSet)
+                                 .setDstBinding(textureCount)
+                                 .setDescriptorCount(1));
+
+            vulkanRHI->UpdateDescriptorSets(writes, {});
+        }
+
+        return material;
     }
 
     void RenderResource::CreateStorageBuffer()
     {
-        const uint32_t frameCount = vulkanRHI->GetFramesInFlightCount();
-        const uint32_t objectSize = sizeof(MeshPerFrameStorageBufferObject);
-
         vk::PhysicalDeviceProperties properties = vulkanRHI->GetPhysicalDeviceProperties();
         storage.minUniformBufferOffsetAlignment = static_cast<uint32_t>(properties.limits.minUniformBufferOffsetAlignment);
         storage.minStorageBufferOffsetAlignment = static_cast<uint32_t>(properties.limits.minStorageBufferOffsetAlignment);
