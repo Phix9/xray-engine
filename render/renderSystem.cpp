@@ -47,27 +47,14 @@ namespace XrayEngine
         renderResource = std::make_shared<RenderResource>();
         renderResource->Initialize(renderResourceInitInfo);
 
-        // MeshData meshData = renderResource->LoadMesh("asset/models/violin/violin.obj");
-
-        // // Material material;
-        // // material.baseColorTexture = "asset/models/violin/BaseColor.png";
-        // // material.metallicTexture = "asset/models/violin/Metallic.png";
-        // // material.roughnessTexture = "asset/models/violin/Roughness.png";
-        // // material.normalTexture = "asset/models/violin/Normal.png";
-        // // material.AOTexture = "asset/models/violin/AO.png";
-        // // PBRMaterialData materialData = renderResource->LoadMaterial(material);
-
-        // renderResource->CreateMeshes(meshData.vertices);
-        // renderResource->CreateMaterial(materialData);
-        // renderResource->CreateStorageBuffer();
+        renderResource->CreateStorageBuffer();
+        renderResource->CreateModel("asset/models/blue_archivekasumizawa_miyu.glb");
 
         MainCameraPassInitInfo mainCameraPassInitInfo;
         mainCameraPassInitInfo.vulkanRHI = vulkanRHI;
         mainCameraPassInitInfo.renderResource = renderResource;
         mainCameraPass = std::make_shared<MainCameraPass>();
         mainCameraPass->Initialize(&mainCameraPassInitInfo);
-
-        // renderResource->CreateIndices(meshData.indices);
     }
     
     void RenderSystem::Quit()

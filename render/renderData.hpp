@@ -12,6 +12,16 @@
 
 namespace XrayEngine
 {
+    enum RenderDomain : uint8_t
+    {
+        eRenderDomainUndefined, 
+		eRenderDomainForwardLighting,
+		eRenderDomainDeferredLighting,
+		eRenderDomainTransparency,
+		eRenderDomainPostProcess,
+		eRenderDomainCount,
+    };
+
     struct BoundingBox
     {
         glm::vec3 min{0.0f};
@@ -112,6 +122,8 @@ namespace XrayEngine
         using Vector = glm::vec4;
 
         std::string name;
+
+        RenderDomain domain;
 
         float alphaCutoff{0.5f};
         MaterialAlphaMode alphaMode{MaterialAlphaMode::eOpaque};

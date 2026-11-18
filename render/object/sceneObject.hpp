@@ -3,17 +3,10 @@
 #include <string>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace XrayEngine
 {
-    struct SceneObject
-    {
-        std::string name;
-        Transform transform;
-
-        uint32_t renderObject;
-    };
-
     struct Transform
     {
         glm::vec3 position{0.0f};
@@ -32,5 +25,13 @@ namespace XrayEngine
         {
             return glm::transpose(glm::inverse(glm::mat3(GetModelMatrix())));
         }
+    };
+
+    struct SceneObject
+    {
+        std::string name;
+        Transform transform;
+
+        uint32_t renderObject;
     };
 }

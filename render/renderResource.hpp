@@ -118,6 +118,10 @@ namespace XrayEngine
         std::vector<TextureData> textureDatas;
         std::vector<MaterialData> materialDatas;
 
+        std::vector<std::vector<uint32_t>> renderQueue{eRenderDomainCount};
+
+        std::vector<RHITexture> defalutTexture;
+
         vk::Sampler sampler;
 
         Storage storage;
@@ -128,6 +132,7 @@ namespace XrayEngine
         void Quit();
         void CreateModel(std::string filePath);
         void CreateStorageBuffer();
+        void CreateRenderQueue();
         void ResetRingBufferOffset();
         void UpdatePerFramebuffer(std::shared_ptr<RenderScene> renderScene, std::shared_ptr<RenderCamera> camera);
         void TransitionImageLayout(vk::Image image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);

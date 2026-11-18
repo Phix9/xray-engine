@@ -42,7 +42,7 @@ namespace XrayEngine
         vulkanRHI->DestroySampler(sampler);
     }
 
-    void MainCameraPass::Draw()
+    /*void MainCameraPass::Draw()
     {
         uint32_t perFrameDynamicOffset = RoundUp(renderResource->storage
                                                      .ringBufferEnds[vulkanRHI->GetCurrentFrameIndex()],
@@ -107,6 +107,107 @@ namespace XrayEngine
         vulkanRHI->CommandDraw(vulkanRHI->GetCurrentCommandBuffer(), 3, 1, 0, 0);
 
         vulkanRHI->CommandEndRenderPass(vulkanRHI->GetCurrentCommandBuffer());
+    }*/
+
+    void MainCameraPass::Draw()
+    {
+        uint32_t perFrameDynamicOffset = RoundUp(renderResource->storage
+                                                     .ringBufferEnds[vulkanRHI->GetCurrentFrameIndex()],
+                                                 renderResource->storage.minStorageBufferOffsetAlignment);
+
+        renderResource->storage.ringBufferEnds[vulkanRHI->GetCurrentFrameIndex()] =
+            perFrameDynamicOffset + sizeof(MeshPerFrameStorageBufferObject);
+
+        (*reinterpret_cast<MeshPerFrameStorageBufferObject *>(
+            reinterpret_cast<uintptr_t>(
+                renderResource->storage.mappedMemory) +
+            perFrameDynamicOffset)) = renderResource->meshPerFrameStorageBufferObject;
+
+        vk::Rect2D renderArea;
+        renderArea.setOffset({0, 0})
+            .setExtent(vulkanRHI->GetSwapchainInfo().extent);
+
+        std::vector<vk::ClearValue> clearValues(eMainCameraPassAttachmentCount);
+        clearValues[eMainCameraPassAttachmentSwapchainImage].setColor({0.0f, 0.0f, 0.0f, 0.0f});
+        clearValues[eMainCameraPassAttachmentDepth].setDepthStencil({1.0f, 0});
+
+        vk::RenderPassBeginInfo beginInfo;
+        beginInfo.setRenderPass(renderPass)
+            .setFramebuffer(swapchainFramebuffers[vulkanRHI->GetCurrentSwapchainImageIndex()])
+            .setRenderArea(renderArea)
+            .setClearValues(clearValues);
+
+        const vk::CommandBuffer commandBuffer = vulkanRHI->GetCurrentCommandBuffer();
+
+        vulkanRHI->CommandBeginRenderPass(commandBuffer, beginInfo, vk::SubpassContents::eInline);
+
+        // Subpass 0: mesh GBuffer pass
+        vulkanRHI->CommandBindPipeline(commandBuffer, vk::PipelineBindPoint::eGraphics,
+                                       renderPipelines[eRenderPipelineTypeMeshGBuffer].pipeline);
+
+        vulkanRHI->CommandSetViewport(commandBuffer, 0, {vulkanRHI->GetSwapchainInfo().viewport});
+        vulkanRHI->CommandSetScissor(commandBuffer, 0, {vulkanRHI->GetSwapchainInfo().scissor});
+
+        {
+            std::vector<vk::DescriptorSet> perFrameSets{descriptorSets[eDescriptorSetLayoutPerFrame]};
+            std::vector<uint32_t> perFrameDynamicOffsets{perFrameDynamicOffset};
+            vulkanRHI->CommandBindDescriptorSet(commandBuffer, vk::PipelineBindPoint::eGraphics,
+                                                renderPipelines[eRenderPipelineTypeMeshGBuffer].layout, 0,
+                                                perFrameSets, perFrameDynamicOffsets);
+        }
+
+        std::vector<vk::DescriptorSet> materialSets(1);
+        std::vector<uint32_t> materialDynamicOffsets;
+        std::vector<vk::Buffer> vertexBuffers(1);
+        std::vector<vk::DeviceSize> vertexOffsets(1);
+        vertexOffsets[0] = 0;
+
+        int lastMaterialIndex = -1;
+        for (uint32_t entityIndex : renderResource->renderQueue[eRenderDomainDeferredLighting])
+        {
+            const RenderEntity &entity = renderResource->renderEntities[entityIndex];
+
+            if (entity.materialIndex != lastMaterialIndex)
+            {
+                lastMaterialIndex = entity.materialIndex;
+                materialSets[0] = renderResource->materials[entity.materialIndex].descriptorSet;
+                vulkanRHI->CommandBindDescriptorSet(commandBuffer, vk::PipelineBindPoint::eGraphics,
+                                                    renderPipelines[eRenderPipelineTypeMeshGBuffer].layout, 1,
+                                                    materialSets, materialDynamicOffsets);
+            }
+
+            const RHIMesh &mesh = renderResource->meshes[entity.meshIndex];
+
+            vertexBuffers[0] = mesh.vertexBuffer;
+            vulkanRHI->CommandBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
+
+            if (mesh.indexCount > 0)
+            {
+                vulkanRHI->CommandBindIndexBuffer(commandBuffer, mesh.indexBuffer, 0, vk::IndexType::eUint32);
+                vulkanRHI->CommandDrawIndexed(commandBuffer, mesh.indexCount, 1, 0, 0, 0);
+            }
+        }
+
+        vulkanRHI->CommandNextSubpass(commandBuffer, vk::SubpassContents::eInline);
+
+        // Subpass 1: deferred lighting pass
+        std::vector<vk::DescriptorSet> deferredLightingDescriptorSets{
+            descriptorSets[eDescriptorSetLayoutPerFrame],
+            descriptorSets[eDescriptorSetLayoutDeferredLighting]};
+
+        vulkanRHI->CommandBindPipeline(commandBuffer, vk::PipelineBindPoint::eGraphics,
+                                       renderPipelines[eRenderPipelineTypeDeferredLighting].pipeline);
+
+        vulkanRHI->CommandBindDescriptorSet(commandBuffer, vk::PipelineBindPoint::eGraphics,
+                                            renderPipelines[eRenderPipelineTypeDeferredLighting].layout, 0,
+                                            deferredLightingDescriptorSets, {perFrameDynamicOffset});
+
+        vulkanRHI->CommandSetViewport(commandBuffer, 0, {vulkanRHI->GetSwapchainInfo().viewport});
+        vulkanRHI->CommandSetScissor(commandBuffer, 0, {vulkanRHI->GetSwapchainInfo().scissor});
+
+        vulkanRHI->CommandDraw(commandBuffer, 3, 1, 0, 0);
+
+        vulkanRHI->CommandEndRenderPass(commandBuffer);
     }
 
     void MainCameraPass::SetupAttachment()
@@ -249,7 +350,7 @@ namespace XrayEngine
             .setSrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentWrite)
             .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
         vk::SubpassDependency &deferredLightingDependOnBasePassDependency = dependencies[1];
-        deferredLightingDependOnExternalDependency.setSrcSubpass(eMainCameraSubpassBasePass)
+        deferredLightingDependOnBasePassDependency.setSrcSubpass(eMainCameraSubpassBasePass)
             .setDstSubpass(eMainCameraSubpassDeferredLighting)
             .setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eFragmentShader)
             .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eFragmentShader)
@@ -506,6 +607,29 @@ namespace XrayEngine
             createInfo.setBindings(perFrameBindings);
 
             descriptorSetLayouts[eDescriptorSetLayoutPerFrame] = vulkanRHI->CreateDescriptorSetLayout(createInfo);
+        }
+
+        {
+            std::vector<vk::DescriptorSetLayoutBinding> meshPerMaterialBindings;
+            meshPerMaterialBindings.resize(6);
+
+            for (uint32_t i = 0; i < 5; i++)
+            {
+                meshPerMaterialBindings[i].setBinding(i)
+                    .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                    .setDescriptorCount(1)
+                    .setStageFlags(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute);
+            }
+
+            meshPerMaterialBindings[5].setBinding(5)
+                .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+                .setDescriptorCount(1)
+                .setStageFlags(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
+
+            vk::DescriptorSetLayoutCreateInfo createInfo;
+            createInfo.setBindings(meshPerMaterialBindings);
+
+            descriptorSetLayouts[eDescriptorSetLayoutMeshPerMaterial] = vulkanRHI->CreateDescriptorSetLayout(createInfo);
         }
 
         {

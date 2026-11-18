@@ -35,6 +35,7 @@ target_include_directories(XrayEngine PUBLIC
     "${ENGINE_ROOT_DIR}"
     "${ENGINE_ROOT_DIR}/shader/generated/cpp"
     "${includes}"
+    "${includes}/tinygltf"
 )
 
 target_link_libraries(XrayEngine PRIVATE

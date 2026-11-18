@@ -24,24 +24,24 @@ namespace XrayEngine
 
         enum MainCameraSubpass : uint8_t
         {
-            eMainCameraSubpassBasePass = 0,
-            eMainCameraSubpassDeferredLighting = 1,
-            eMainCameraSubpassCount = 2,
+            eMainCameraSubpassBasePass,
+            eMainCameraSubpassDeferredLighting,
+            eMainCameraSubpassCount,
         };
 
         enum RenderPipelineType : uint8_t
         {
-            eRenderPipelineTypeMeshGBuffer = 0,
-            eRenderPipelineTypeDeferredLighting = 1,
-            eRenderPipelineTypeCount = 2,
+            eRenderPipelineTypeMeshGBuffer,
+            eRenderPipelineTypeDeferredLighting,
+            eRenderPipelineTypeCount,
         };
 
         enum DescriptorSetLayoutType : uint8_t
         {
-            eDescriptorSetLayoutPerFrame = 0,
-            eDescriptorSetLayoutMeshPerMaterial = 1,
-            eDescriptorSetLayoutDeferredLighting = 2,
-            eDescriptorSetLayoutCount = 3,
+            eDescriptorSetLayoutPerFrame,
+            eDescriptorSetLayoutMeshPerMaterial,
+            eDescriptorSetLayoutDeferredLighting,
+            eDescriptorSetLayoutCount,
         };
 
     public:
@@ -65,5 +65,6 @@ namespace XrayEngine
         void SetupSwapchainFramebuffers();
         void SetupDescriptorSetLayout();
         void SetupDescriptorSet();
+        void DrawEntity(const vk::CommandBuffer &commandBuffer, uint32_t entityIndex, uint32_t perFrameDynamicOffset);
     };
 }

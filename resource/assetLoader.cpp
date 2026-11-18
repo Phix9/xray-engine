@@ -1,3 +1,7 @@
+#define TINYGLTF_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+
 #include "assetLoader.hpp"
 
 namespace XrayEngine
@@ -553,6 +557,8 @@ namespace XrayEngine
         {
             materialData.alphaMode = MaterialAlphaMode::eOpaque;
         }
+
+        materialData.domain = eRenderDomainDeferredLighting;
 
         materialData.setVector("baseColorFactor", material.baseColorFactor);
         materialData.setScalar("metallicFactor", material.metallicFactor);

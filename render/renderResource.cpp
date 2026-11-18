@@ -1,8 +1,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define TINYOBJLOADER_IMPLEMENTATION
 
-#include <cstdlib>
-
 #include "render/renderResource.hpp"
 
 namespace XrayEngine
@@ -11,6 +9,18 @@ namespace XrayEngine
     {
         vulkanRHI = initInfo.vulkanRHI;
         sampler = vulkanRHI->CreateDefaultLinearSampler();
+
+        TextureData defaultTextureData;
+        defaultTextureData.width = 1;
+        defaultTextureData.height = 1;
+        defaultTextureData.format = vk::Format::eR8G8B8A8Unorm;
+
+        unsigned char whitePixel[4] = {255, 255, 255, 255};
+        defaultTextureData.pixels = std::malloc(4);
+        std::memcpy(defaultTextureData.pixels, whitePixel, 4);
+
+        defalutTexture.push_back(CreateTexture(defaultTextureData));
+        std::free(defaultTextureData.pixels);
     }
 
     void RenderResource::Quit()
@@ -102,6 +112,8 @@ namespace XrayEngine
         {
             materials.push_back(CreateMaterial(materialData));
         }
+
+        CreateRenderQueue();
     }
 
     RHIMesh RenderResource::CreateMesh(const MeshData &meshData)
@@ -245,10 +257,7 @@ namespace XrayEngine
         {
             for (const Parameter<TextureInfoData> &texture : materialData.textures)
             {
-                if (texture.value.textureIndex >= 0)
-                {
-                    material.textureReferences.push_back(texture.value.textureIndex);
-                }
+                material.textureReferences.push_back(texture.value.textureIndex >= 0 ? texture.value.textureIndex : -1);
             }
 
             MeshPerMaterialUniformBufferObject meshPerMaterialUniformBufferObject;
@@ -265,10 +274,6 @@ namespace XrayEngine
             {
                 meshPerMaterialUniformBufferObject.uniforms.push_back(scalar.value);
             }
-
-            meshPerMaterialUniformBufferObject.uniforms.push_back(materialData.alphaCutoff);
-            meshPerMaterialUniformBufferObject.uniforms.push_back(static_cast<float>(static_cast<uint32_t>(materialData.alphaMode)));
-            meshPerMaterialUniformBufferObject.uniforms.push_back(static_cast<float>(materialData.doubleSided));
 
             const vk::DeviceSize uboSize = meshPerMaterialUniformBufferObject.uniforms.size() * sizeof(float);
 
@@ -316,8 +321,12 @@ namespace XrayEngine
             imageInfos.reserve(textureCount);
             for (uint32_t i = 0; i < textureCount; i++)
             {
+                const vk::ImageView imageView = material.textureReferences[i] >= 0
+                                                    ? texturePool[material.textureReferences[i]].imageView
+                                                    : defalutTexture[0].imageView;
+
                 imageInfos.push_back(vk::DescriptorImageInfo().setSampler(sampler)
-                                         .setImageView(texturePool[material.textureReferences[i]].imageView)
+                                         .setImageView(imageView)
                                          .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));
             }
 
@@ -377,6 +386,35 @@ namespace XrayEngine
         }
 
         storage.mappedMemory = vulkanRHI->MapMemory(storage.ringBufferMemory, 0, bufferSize);
+    }
+
+    void RenderResource::CreateRenderQueue()
+    {
+        for (std::vector<uint32_t> &queue : renderQueue)
+        {
+            queue.clear();
+        }
+
+        for (size_t i = 0; i < renderEntities.size(); i++)
+        {
+            const RenderEntity &renderEntity = renderEntities[i];
+
+            if (renderEntity.meshIndex < 0 || renderEntity.materialIndex < 0)
+            {
+                continue;
+            }
+
+            renderQueue[materialDatas[renderEntity.materialIndex].domain].push_back(static_cast<uint32_t>(i));
+        }
+
+        for (std::vector<uint32_t> &queue : renderQueue)
+        {
+            std::stable_sort(queue.begin(), queue.end(),
+                [this](uint32_t left, uint32_t right)
+                {
+                    return renderEntities[left].materialIndex < renderEntities[right].materialIndex;
+                });
+        }
     }
 
     void RenderResource::ResetRingBufferOffset()
